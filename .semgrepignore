@@ -1,0 +1,10 @@
+# Semgrep scope = the Frappe app only.
+#
+# The wg-agent sidecar is a standalone root daemon with NO Frappe import (the
+# security boundary). Frappe semgrep rules (frappe.throw, ORM, "args") do not
+# apply, and its file access IS the audited boundary — it has its own stdlib
+# tests + an adversarial security review instead.
+deploy/
+
+# Vendored Claude skill/agent tooling — not part of the app.
+.claude/
