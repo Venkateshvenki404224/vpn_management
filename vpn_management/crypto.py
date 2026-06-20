@@ -25,6 +25,14 @@ def public_key_for(private_key):
 	return _encode_public(private.public_key())
 
 
+def is_valid_public_key(public_key):
+	"""True if ``public_key`` is a base64-encoded 32-byte X25519 key."""
+	try:
+		return len(base64.b64decode(public_key, validate=True)) == 32
+	except (ValueError, TypeError):
+		return False
+
+
 def _encode_private(private):
 	raw = private.private_bytes(
 		serialization.Encoding.Raw,

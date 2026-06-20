@@ -51,7 +51,7 @@ class WireGuardServer(Document):
 
 	def _enqueue_provision(self):
 		frappe.enqueue(
-			"vpn_management.tasks.provision_server",
+			"vpn_management.tasks.reconcile_interface",
 			queue="long",
 			enqueue_after_commit=True,
 			job_id=f"reconcile-{self.interface_name}",

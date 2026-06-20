@@ -8,7 +8,7 @@ re-validates *every* argument before shelling out. Nothing the worker sends is
 trusted: the verb must be in :data:`ALLOWED_VERBS`, interfaces must match
 ``^wg[0-9]+$``, and conf files must resolve under :data:`WG_DIR` at mode 600.
 
-Phase 1 implements two verbs: ``up <iface>`` and ``show [<iface>]``.
+Verbs: ``up <iface>``, ``syncconf <iface> <conf>``, ``show [<iface>]``.
 """
 
 import json
@@ -28,7 +28,7 @@ SOCKET_PATH = os.path.join(SOCKET_DIR, "agent.sock")
 # standalone install passes the real bench uid via WG_AGENT_SOCKET_UID.
 SOCKET_UID = int(os.environ.get("WG_AGENT_SOCKET_UID", "1000"))
 
-ALLOWED_VERBS = ("up", "show")
+ALLOWED_VERBS = ("up", "syncconf", "show")
 INTERFACE_PATTERN = re.compile(r"^wg[0-9]+$")
 # Default-deny conf allowlist: wg-quick runs Pre/PostUp/Down + SaveConfig as
 # root, so the agent accepts only these inert keys and rejects everything else
@@ -38,9 +38,14 @@ CONF_SECTION_KEYS = {
 	"peer": {"publickey", "presharedkey", "allowedips", "endpoint", "persistentkeepalive"},
 }
 MAX_REQUEST = 64 * 1024
+MAX_CONF = 64 * 1024
 COMMAND_TIMEOUT = 30
 MAX_WORKERS = 8
 MAX_INFLIGHT = 32
+# Root-owned scratch dir (NOT on the worker-shared volume): the agent stages the
+# validated conf bytes here and points wg-quick/wg at this copy, so the root tool
+# never re-reads the worker-writable render dir — closing the validate/use TOCTOU.
+STAGE_DIR = "/run/wg-stage"
 
 
 def assert_iface(iface):
@@ -64,42 +69,79 @@ def conf_path_for(iface):
 	return assert_under_dir(os.path.join(WG_DIR, f"{iface}.conf"), WG_DIR)
 
 
-def assert_conf_ready(path):
-	"""Require the conf to exist as a regular, owner-only (mode 600) file."""
-	info = os.stat(path)
-	if not stat.S_ISREG(info.st_mode):
-		raise ValueError(f"conf is not a regular file: {path!r}")
-	if stat.S_IMODE(info.st_mode) != 0o600:
-		raise ValueError(f"conf must be mode 600: {path!r}")
-
-
-def assert_conf_safe(path):
-	"""Reject a conf that carries any key outside the inert allowlist.
+def _assert_conf_safe_text(text):
+	"""Reject conf text carrying any key outside the inert allowlist.
 
 	The worker owns the render dir, so the body is untrusted: this is what stops
 	a smuggled ``PostUp``/``SaveConfig`` from running as root under wg-quick.
 	"""
 	section = None
+	for raw_line in text.splitlines():
+		line = raw_line.split("#", 1)[0].strip()
+		if not line:
+			continue
+		if line.startswith("[") and line.endswith("]"):
+			section = line[1:-1].strip().lower()
+			if section not in CONF_SECTION_KEYS:
+				raise ValueError(f"conf has an unknown section: {line!r}")
+			continue
+		if section is None or "=" not in line:
+			raise ValueError(f"conf has a malformed line: {raw_line.strip()!r}")
+		key = line.split("=", 1)[0].strip().lower()
+		if key not in CONF_SECTION_KEYS[section]:
+			raise ValueError(f"conf key not allowed in [{section}]: {key!r}")
+
+
+def assert_conf_safe(path):
+	"""File wrapper around :func:`_assert_conf_safe_text` (validation only)."""
 	with open(path, encoding="utf-8") as handle:
-		for raw_line in handle:
-			line = raw_line.split("#", 1)[0].strip()
-			if not line:
-				continue
-			if line.startswith("[") and line.endswith("]"):
-				section = line[1:-1].strip().lower()
-				if section not in CONF_SECTION_KEYS:
-					raise ValueError(f"conf has an unknown section: {line!r}")
-				continue
-			if section is None or "=" not in line:
-				raise ValueError(f"conf has a malformed line: {raw_line.strip()!r}")
-			key = line.split("=", 1)[0].strip().lower()
-			if key not in CONF_SECTION_KEYS[section]:
-				raise ValueError(f"conf key not allowed in [{section}]: {key!r}")
+		_assert_conf_safe_text(handle.read())
 
 
-def run(command):
-	"""Run a validated command, returning a JSON-serialisable result envelope."""
-	completed = subprocess.run(command, capture_output=True, text=True, timeout=COMMAND_TIMEOUT)
+def read_validated_conf(iface):
+	"""Read the worker-owned conf for ``iface`` exactly once and validate THOSE bytes.
+
+	The render dir is writable by the unprivileged worker, so a stat-then-reopen
+	would let it swap the file between the agent's check and wg-quick's read
+	(a TOCTOU that yields root code execution via a smuggled PostUp). We open once,
+	check the open fd, read the bytes, validate them, and return *these* bytes —
+	the caller hands them to the root tools instead of the path.
+	"""
+	path = conf_path_for(iface)
+	fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+	try:
+		info = os.fstat(fd)
+		if not stat.S_ISREG(info.st_mode):
+			raise ValueError(f"conf is not a regular file: {path!r}")
+		if stat.S_IMODE(info.st_mode) != 0o600:
+			raise ValueError(f"conf must be mode 600: {path!r}")
+		if info.st_size > MAX_CONF:
+			raise ValueError(f"conf too large: {path!r}")
+		data = os.read(fd, MAX_CONF)
+	finally:
+		os.close(fd)
+	_assert_conf_safe_text(data.decode("utf-8"))
+	return data
+
+
+def stage_conf(iface, data):
+	"""Write validated bytes to a root-owned file the worker cannot swap."""
+	os.makedirs(STAGE_DIR, exist_ok=True)
+	os.chmod(STAGE_DIR, 0o700)
+	dest = os.path.join(STAGE_DIR, f"{iface}.conf")
+	fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+	with os.fdopen(fd, "wb") as handle:
+		handle.write(data)
+	return dest
+
+
+def _stage_validated(iface):
+	"""Validate the iface's worker-owned conf and stage it root-owned; return the path."""
+	return stage_conf(iface, read_validated_conf(iface))
+
+
+def _envelope(completed):
+	"""Wrap a finished subprocess in a JSON-serialisable result envelope."""
 	return {
 		"ok": completed.returncode == 0,
 		"code": completed.returncode,
@@ -108,14 +150,50 @@ def run(command):
 	}
 
 
+def run(command):
+	"""Run a validated command, returning a JSON-serialisable result envelope."""
+	return _envelope(subprocess.run(command, capture_output=True, text=True, timeout=COMMAND_TIMEOUT))
+
+
+def run_syncconf(iface, path):
+	"""Apply a config to a live interface without re-running PostUp/PostDown.
+
+	``wg syncconf`` speaks the ``wg setconf`` dialect, which rejects wg-quick-only
+	keys (Address, DNS, …), so the conf is first reduced with ``wg-quick strip``
+	and piped in. The interface must already be up.
+	"""
+	stripped = subprocess.run(
+		["wg-quick", "strip", path], capture_output=True, text=True, timeout=COMMAND_TIMEOUT
+	)
+	if stripped.returncode != 0:
+		return _envelope(stripped)
+	applied = subprocess.run(
+		["wg", "syncconf", iface, "/dev/stdin"],
+		input=stripped.stdout,
+		capture_output=True,
+		text=True,
+		timeout=COMMAND_TIMEOUT,
+	)
+	return _envelope(applied)
+
+
 def handle_up(args):
 	if len(args) != 1:
 		raise ValueError("up takes exactly one interface")
 	iface = args[0]
-	path = conf_path_for(iface)
-	assert_conf_ready(path)
-	assert_conf_safe(path)
-	return run(["wg-quick", "up", iface])
+	assert_iface(iface)
+	return run(["wg-quick", "up", _stage_validated(iface)])
+
+
+def handle_syncconf(args):
+	if len(args) != 2:
+		raise ValueError("syncconf takes an interface and a conf file")
+	iface, conf = args
+	assert_iface(iface)
+	# Bind the conf arg to the interface (no divergence from up's coupling).
+	if assert_under_dir(conf, WG_DIR) != conf_path_for(iface):
+		raise ValueError(f"conf {conf!r} does not match interface {iface!r}")
+	return run_syncconf(iface, _stage_validated(iface))
 
 
 def handle_show(args):
@@ -128,7 +206,7 @@ def handle_show(args):
 	return run(["wg", "show", iface])
 
 
-HANDLERS = {"up": handle_up, "show": handle_show}
+HANDLERS = {"up": handle_up, "syncconf": handle_syncconf, "show": handle_show}
 
 
 def dispatch(raw):

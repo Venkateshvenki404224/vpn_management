@@ -1,0 +1,106 @@
+{
+ "actions": [],
+ "autoname": "field:pool_name",
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "pool_name",
+  "server",
+  "cidr",
+  "gateway_ip",
+  "host_increment_strategy",
+  "reserved_section",
+  "reserved_ranges",
+  "state_section",
+  "total_addresses",
+  "last_materialized"
+ ],
+ "fields": [
+  {
+   "fieldname": "pool_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Pool Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Server",
+   "options": "WireGuard Server",
+   "reqd": 1
+  },
+  {
+   "description": "Address space to materialize, e.g. 172.27.0.0/16.",
+   "fieldname": "cidr",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "CIDR",
+   "reqd": 1
+  },
+  {
+   "description": "Reserved (never auto-allocated). Usually the .1 of the CIDR.",
+   "fieldname": "gateway_ip",
+   "fieldtype": "Data",
+   "label": "Gateway IP"
+  },
+  {
+   "default": "sequential",
+   "fieldname": "host_increment_strategy",
+   "fieldtype": "Select",
+   "label": "Host Increment Strategy",
+   "options": "sequential"
+  },
+  {
+   "fieldname": "reserved_section",
+   "fieldtype": "Section Break",
+   "label": "Reserved Ranges"
+  },
+  {
+   "fieldname": "reserved_ranges",
+   "fieldtype": "Table",
+   "label": "Reserved Ranges",
+   "options": "Network Reserved Range"
+  },
+  {
+   "fieldname": "state_section",
+   "fieldtype": "Section Break",
+   "label": "State"
+  },
+  {
+   "fieldname": "total_addresses",
+   "fieldtype": "Int",
+   "label": "Total Addresses",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_materialized",
+   "fieldtype": "Datetime",
+   "label": "Last Materialized",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "Network Pool",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

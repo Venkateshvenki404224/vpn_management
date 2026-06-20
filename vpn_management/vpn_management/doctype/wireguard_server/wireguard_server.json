@@ -18,7 +18,8 @@
   "enabled",
   "status",
   "interface_up",
-  "last_reconcile"
+  "last_reconcile",
+  "config_hash"
  ],
  "fields": [
   {
@@ -113,6 +114,14 @@
    "fieldname": "last_reconcile",
    "fieldtype": "Datetime",
    "label": "Last Reconcile",
+   "read_only": 1
+  },
+  {
+   "description": "sha256 of the last rendered conf; short-circuits no-op reconciles.",
+   "fieldname": "config_hash",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Config Hash",
    "read_only": 1
   }
  ],

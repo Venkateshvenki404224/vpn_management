@@ -56,7 +56,7 @@ class TestWireGuardServer(IntegrationTestCase):
 	def test_save_enqueues_deduplicated_reconcile(self, enqueue):
 		_new_server().insert()
 		enqueue.assert_called_with(
-			"vpn_management.tasks.provision_server",
+			"vpn_management.tasks.reconcile_interface",
 			queue="long",
 			enqueue_after_commit=True,
 			job_id="reconcile-wg9",

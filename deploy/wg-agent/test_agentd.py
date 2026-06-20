@@ -53,24 +53,41 @@ class ConfPathTests(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				agentd.assert_under_dir(link, base)
 
+
+class ReadValidatedConfTests(unittest.TestCase):
+	def setUp(self):
+		self._original_dir = agentd.WG_DIR
+		self.base = tempfile.mkdtemp()
+		agentd.WG_DIR = self.base
+
+	def tearDown(self):
+		agentd.WG_DIR = self._original_dir
+
+	def _write(self, body, mode=0o600):
+		path = os.path.join(self.base, "wg0.conf")
+		with open(path, "w") as handle:
+			handle.write(body)
+		os.chmod(path, mode)
+		return path
+
 	def test_rejects_world_readable_conf(self):
-		with tempfile.TemporaryDirectory() as base:
-			path = os.path.join(base, "wg0.conf")
-			open(path, "w").close()
-			os.chmod(path, 0o644)
-			with self.assertRaises(ValueError):
-				agentd.assert_conf_ready(path)
+		self._write("[Interface]\nPrivateKey = AAAA\n", mode=0o644)
+		with self.assertRaises(ValueError):
+			agentd.read_validated_conf("wg0")
 
 	def test_rejects_missing_conf(self):
 		with self.assertRaises(OSError):
-			agentd.assert_conf_ready("/nonexistent/wg0.conf")
+			agentd.read_validated_conf("wg0")
 
-	def test_accepts_owner_only_conf(self):
-		with tempfile.TemporaryDirectory() as base:
-			path = os.path.join(base, "wg0.conf")
-			open(path, "w").close()
-			os.chmod(path, 0o600)
-			agentd.assert_conf_ready(path)
+	def test_rejects_directive(self):
+		self._write("[Interface]\nPrivateKey = AAAA\nPostUp = id\n")
+		with self.assertRaises(ValueError):
+			agentd.read_validated_conf("wg0")
+
+	def test_returns_owner_only_validated_bytes(self):
+		body = "[Interface]\nPrivateKey = AAAA\nAddress = 10.0.0.1/24\n"
+		self._write(body)
+		self.assertEqual(agentd.read_validated_conf("wg0"), body.encode("utf-8"))
 
 
 class ConfSafeTests(unittest.TestCase):
@@ -150,6 +167,134 @@ class DispatchTests(unittest.TestCase):
 				self.assertEqual(self.calls, [])
 			finally:
 				agentd.WG_DIR = original
+
+
+class SyncconfTests(unittest.TestCase):
+	def setUp(self):
+		self._original_dir = agentd.WG_DIR
+		self._original_stage = agentd.STAGE_DIR
+		self._original_run = agentd.run_syncconf
+		self.base = tempfile.mkdtemp()
+		self.stage = tempfile.mkdtemp()
+		agentd.WG_DIR = self.base
+		agentd.STAGE_DIR = self.stage
+		self.calls = []
+		agentd.run_syncconf = lambda iface, path: self.calls.append((iface, path)) or {"ok": True}
+
+	def tearDown(self):
+		agentd.WG_DIR = self._original_dir
+		agentd.STAGE_DIR = self._original_stage
+		agentd.run_syncconf = self._original_run
+
+	def _write_conf(self, body, mode=0o600):
+		path = os.path.join(self.base, "wg0.conf")
+		with open(path, "w") as handle:
+			handle.write(body)
+		os.chmod(path, mode)
+		return path
+
+	def test_requires_two_args(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb":"syncconf","args":["wg0"]}')
+		self.assertEqual(self.calls, [])
+
+	def test_rejects_bad_interface(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb":"syncconf","args":["wg0; reboot","/etc/wireguard/wg0.conf"]}')
+		self.assertEqual(self.calls, [])
+
+	def test_rejects_conf_outside_dir(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb":"syncconf","args":["wg0","/etc/passwd"]}')
+		self.assertEqual(self.calls, [])
+
+	def _payload(self, path):
+		return ('{"verb": "syncconf", "args": ["wg0", "%s"]}' % path).encode("utf-8")
+
+	def test_rejects_world_readable_conf(self):
+		path = self._write_conf("[Interface]\nPrivateKey = AAAA\n", mode=0o644)
+		with self.assertRaises(ValueError):
+			agentd.dispatch(self._payload(path))
+		self.assertEqual(self.calls, [])
+
+	def test_rejects_conf_with_directive(self):
+		path = self._write_conf("[Interface]\nPrivateKey = AAAA\nPostUp = bash -c 'id'\n")
+		with self.assertRaises(ValueError):
+			agentd.dispatch(self._payload(path))
+		self.assertEqual(self.calls, [])
+
+	def test_validates_and_runs_against_staged_copy(self):
+		path = self._write_conf("[Interface]\nPrivateKey = AAAA\nAddress = 10.0.0.1/24\n")
+		reply = agentd.dispatch(self._payload(path))
+		self.assertTrue(reply["ok"])
+		# syncconf consumes the root-owned staged copy, not the worker's render dir.
+		self.assertEqual(self.calls, [("wg0", os.path.join(self.stage, "wg0.conf"))])
+
+	def test_rejects_conf_not_matching_interface(self):
+		other = os.path.join(self.base, "wg1.conf")
+		with open(other, "w") as handle:
+			handle.write("[Interface]\nPrivateKey = AAAA\n")
+		os.chmod(other, 0o600)
+		with self.assertRaises(ValueError):
+			agentd.dispatch(self._payload(other))
+		self.assertEqual(self.calls, [])
+
+
+class UpTests(unittest.TestCase):
+	def setUp(self):
+		self._original_dir = agentd.WG_DIR
+		self._original_stage = agentd.STAGE_DIR
+		self._original_run = agentd.run
+		self.base = tempfile.mkdtemp()
+		self.stage = tempfile.mkdtemp()
+		agentd.WG_DIR = self.base
+		agentd.STAGE_DIR = self.stage
+		self.calls = []
+		agentd.run = lambda command: self.calls.append(command) or {"ok": True}
+
+	def tearDown(self):
+		agentd.WG_DIR = self._original_dir
+		agentd.STAGE_DIR = self._original_stage
+		agentd.run = self._original_run
+
+	def _write(self, body, mode=0o600):
+		path = os.path.join(self.base, "wg0.conf")
+		with open(path, "w") as handle:
+			handle.write(body)
+		os.chmod(path, mode)
+		return path
+
+	def test_up_runs_against_staged_validated_copy(self):
+		body = "[Interface]\nPrivateKey = AAAA\nAddress = 10.0.0.1/24\n"
+		self._write(body)
+		reply = agentd.dispatch(b'{"verb":"up","args":["wg0"]}')
+		self.assertTrue(reply["ok"])
+		staged = os.path.join(self.stage, "wg0.conf")
+		self.assertEqual(self.calls, [["wg-quick", "up", staged]])
+		with open(staged) as handle:
+			self.assertEqual(handle.read(), body)
+
+	def test_up_applies_validated_bytes_even_if_conf_swapped_after_check(self):
+		# TOCTOU regression: the worker swaps a root-directive conf in the instant
+		# the allowlist check runs; the staged (applied) bytes must be the validated ones.
+		benign = "[Interface]\nPrivateKey = AAAA\nAddress = 10.0.0.1/24\n"
+		malicious = "[Interface]\nPrivateKey = AAAA\nPostUp = bash -c id\n"
+		conf = self._write(benign)
+		real = agentd._assert_conf_safe_text
+
+		def swap_then_validate(text):
+			with open(conf, "w") as handle:
+				handle.write(malicious)
+			os.chmod(conf, 0o600)
+			real(text)
+
+		agentd._assert_conf_safe_text = swap_then_validate
+		try:
+			agentd.dispatch(b'{"verb":"up","args":["wg0"]}')
+		finally:
+			agentd._assert_conf_safe_text = real
+		with open(os.path.join(self.stage, "wg0.conf")) as handle:
+			self.assertEqual(handle.read(), benign)
 
 
 if __name__ == "__main__":

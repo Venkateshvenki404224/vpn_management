@@ -7,6 +7,7 @@
   "environment",
   "egress_interface",
   "default_listen_port",
+  "allow_server_keygen",
   "wg_dir",
   "vpn_endpoint_host"
  ],
@@ -30,6 +31,13 @@
    "fieldname": "default_listen_port",
    "fieldtype": "Int",
    "label": "Default Listen Port"
+  },
+  {
+   "default": "1",
+   "description": "Generate a peer keypair in-app when the peer is created without a public key.",
+   "fieldname": "allow_server_keygen",
+   "fieldtype": "Check",
+   "label": "Allow Server Key Generation"
   },
   {
    "default": "/etc/wireguard",

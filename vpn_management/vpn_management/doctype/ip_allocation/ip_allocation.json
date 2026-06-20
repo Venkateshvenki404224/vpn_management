@@ -1,0 +1,101 @@
+{
+ "actions": [],
+ "autoname": "format:{server}-{ip_address}",
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "server",
+  "pool",
+  "ip_address",
+  "ip_order",
+  "allocated",
+  "reserved",
+  "peer",
+  "allocated_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "server",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server",
+   "options": "WireGuard Server",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "pool",
+   "fieldtype": "Link",
+   "label": "Pool",
+   "options": "Network Pool"
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "IP Address",
+   "reqd": 1
+  },
+  {
+   "description": "Integer form of ip_address; orders sequential allocation index-friendly.",
+   "fieldname": "ip_order",
+   "fieldtype": "Long Int",
+   "hidden": 1,
+   "label": "IP Order",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "allocated",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Allocated"
+  },
+  {
+   "default": "0",
+   "fieldname": "reserved",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reserved"
+  },
+  {
+   "fieldname": "peer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Peer",
+   "options": "VPN Peer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allocated_on",
+   "fieldtype": "Datetime",
+   "label": "Allocated On",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "IP Allocation",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
