@@ -26,6 +26,11 @@ packages = []
 [tool.ruff]
 line-length = 110
 target-version = "py314"
+# Vendored agent/skill tooling under .claude is not part of the app and uses its
+# own (space-indented) style; keep it out of the app's lint/format gate.
+# force-exclude makes the exclusion apply even when pre-commit passes paths directly.
+extend-exclude = [".claude"]
+force-exclude = true
 
 [tool.ruff.lint]
 select = [
