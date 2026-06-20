@@ -10,6 +10,8 @@
   "environment",
   "address_cidr",
   "egress_interface",
+  "firewall_section",
+  "firewall_rules",
   "keys_section",
   "server_public_key",
   "server_private_key",
@@ -56,6 +58,18 @@
    "fieldname": "egress_interface",
    "fieldtype": "Data",
    "label": "Egress Interface"
+  },
+  {
+   "fieldname": "firewall_section",
+   "fieldtype": "Section Break",
+   "label": "Firewall"
+  },
+  {
+   "description": "iptables NAT/forward rules rendered into PostUp/PostDown; seeded from VPN Settings on creation.",
+   "fieldname": "firewall_rules",
+   "fieldtype": "Table",
+   "label": "Firewall Rules",
+   "options": "WireGuard Firewall Rule"
   },
   {
    "fieldname": "keys_section",

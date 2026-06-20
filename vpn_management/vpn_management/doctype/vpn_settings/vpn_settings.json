@@ -9,7 +9,13 @@
   "default_listen_port",
   "allow_server_keygen",
   "wg_dir",
-  "vpn_endpoint_host"
+  "vpn_endpoint_host",
+  "firewall_section",
+  "multiport_redirect_ports",
+  "redirect_target_port",
+  "dns_servers",
+  "default_keepalive",
+  "status_poll_interval_min"
  ],
  "fields": [
   {
@@ -50,6 +56,45 @@
    "fieldname": "vpn_endpoint_host",
    "fieldtype": "Data",
    "label": "VPN Endpoint Host"
+  },
+  {
+   "fieldname": "firewall_section",
+   "fieldtype": "Section Break",
+   "label": "Firewall & Status"
+  },
+  {
+   "default": "333,666,999,3333,4444",
+   "description": "Comma-separated UDP ports redirected to the WireGuard listen port.",
+   "fieldname": "multiport_redirect_ports",
+   "fieldtype": "Small Text",
+   "label": "Multiport Redirect Ports"
+  },
+  {
+   "default": "44556",
+   "description": "Port the multiport redirect targets (the WireGuard listen port).",
+   "fieldname": "redirect_target_port",
+   "fieldtype": "Int",
+   "label": "Redirect Target Port"
+  },
+  {
+   "description": "DNS servers offered to clients in their rendered config.",
+   "fieldname": "dns_servers",
+   "fieldtype": "Data",
+   "label": "DNS Servers"
+  },
+  {
+   "default": "25",
+   "description": "Default PersistentKeepalive (seconds) for new peers.",
+   "fieldname": "default_keepalive",
+   "fieldtype": "Int",
+   "label": "Default Keepalive"
+  },
+  {
+   "default": "5",
+   "description": "A peer with no handshake within this many minutes is marked Stale.",
+   "fieldname": "status_poll_interval_min",
+   "fieldtype": "Int",
+   "label": "Status Poll Interval (min)"
   }
  ],
  "issingle": 1,

@@ -22,7 +22,11 @@
   "endpoint",
   "state_section",
   "status",
-  "synced_to_interface"
+  "synced_to_interface",
+  "live_status_section",
+  "last_handshake",
+  "rx_bytes",
+  "tx_bytes"
  ],
  "fields": [
   {
@@ -142,6 +146,31 @@
    "fieldname": "synced_to_interface",
    "fieldtype": "Check",
    "label": "Synced To Interface",
+   "read_only": 1
+  },
+  {
+   "fieldname": "live_status_section",
+   "fieldtype": "Section Break",
+   "label": "Live Status"
+  },
+  {
+   "description": "Last handshake read back from the live interface by poll_status.",
+   "fieldname": "last_handshake",
+   "fieldtype": "Datetime",
+   "label": "Last Handshake",
+   "read_only": 1
+  },
+  {
+   "description": "Cumulative bytes received from this peer (Long Int: byte counters overflow Int).",
+   "fieldname": "rx_bytes",
+   "fieldtype": "Long Int",
+   "label": "RX Bytes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tx_bytes",
+   "fieldtype": "Long Int",
+   "label": "TX Bytes",
    "read_only": 1
   }
  ],

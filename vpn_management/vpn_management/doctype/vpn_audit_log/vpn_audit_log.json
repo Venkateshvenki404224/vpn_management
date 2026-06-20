@@ -1,0 +1,104 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "action",
+  "target",
+  "result",
+  "actor",
+  "source_ip",
+  "in_use_count_at_run",
+  "detail_section",
+  "argv_redacted",
+  "detail"
+ ],
+ "fields": [
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Action",
+   "options": "provision\npeer_apply\npeer_remove\ninterface_up\ninterface_down\nsync_network\nreconcile\nstatus_poll\nkeygen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Target",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Result",
+   "options": "success\nfailure\nskipped",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Actor",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_ip",
+   "fieldtype": "Data",
+   "label": "Source IP",
+   "read_only": 1
+  },
+  {
+   "description": "In-use IP allocations on the target server when this action ran.",
+   "fieldname": "in_use_count_at_run",
+   "fieldtype": "Int",
+   "label": "In Use Count At Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "detail_section",
+   "fieldtype": "Section Break",
+   "label": "Detail"
+  },
+  {
+   "description": "The privileged command, with key material redacted.",
+   "fieldname": "argv_redacted",
+   "fieldtype": "Small Text",
+   "label": "Argv Redacted",
+   "read_only": 1
+  },
+  {
+   "description": "Free-text detail, with key material redacted.",
+   "fieldname": "detail",
+   "fieldtype": "Small Text",
+   "label": "Detail",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "VPN Audit Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

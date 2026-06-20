@@ -7,7 +7,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from vpn_management import crypto
+from vpn_management import crypto, firewall
 
 INTERFACE_PATTERN = re.compile(r"^wg[0-9]+$")
 ENVIRONMENT_CIDR = {"dev": "172.27.0.1/16", "prod": "172.30.0.1/16"}
@@ -17,12 +17,14 @@ class WireGuardServer(Document):
 	"""A WireGuard interface whose desired state lives in the DB.
 
 	The live kernel interface is a reconciled artifact: every save enqueues the
-	background reconcile (:func:`vpn_management.tasks.provision_server`) rather
-	than touching the kernel inline.
+	background reconcile (:func:`vpn_management.tasks.reconcile_interface`) rather
+	than touching the kernel inline. On creation its firewall rules are seeded
+	from :mod:`vpn_management.firewall`.
 	"""
 
 	def before_insert(self):
 		self._generate_keypair()
+		firewall.seed_rules(self)
 
 	def validate(self):
 		self._validate_interface_name()

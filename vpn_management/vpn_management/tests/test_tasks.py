@@ -38,6 +38,17 @@ class TestReconcileInterface(IntegrationTestCase):
 		self.assertIn("[Interface]", conf)
 		self.assertIn("Address = 172.27.0.1/16", conf)
 		self.assertIn("ListenPort = 44556", conf)
+		# Firewall rules render into PostUp (idempotent -C || -A, run on bring-up)
+		# and PostDown (teardown).
+		self.assertIn(
+			"PostUp = iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE "
+			"|| iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE",
+			conf,
+		)
+		self.assertIn("|| iptables -t nat -A PREROUTING -p udp -m multiport --dport", conf)
+		self.assertIn("PostDown = iptables -t filter -D FORWARD -i wg8 -j ACCEPT", conf)
+		# The persistent REDIRECT is never torn down, so it has no PostDown.
+		self.assertNotIn("PostDown = iptables -t nat -D PREROUTING", conf)
 		self.assertEqual(stat.S_IMODE(os.stat(self._conf_path()).st_mode), 0o600)
 
 		server = frappe.get_doc("WireGuard Server", "wg8")

@@ -8,7 +8,7 @@ re-validates *every* argument before shelling out. Nothing the worker sends is
 trusted: the verb must be in :data:`ALLOWED_VERBS`, interfaces must match
 ``^wg[0-9]+$``, and conf files must resolve under :data:`WG_DIR` at mode 600.
 
-Verbs: ``up <iface>``, ``syncconf <iface> <conf>``, ``show [<iface>]``.
+Verbs: ``up <iface>``, ``syncconf <iface> <conf>``, ``show [<iface> [dump]]``.
 """
 
 import json
@@ -33,9 +33,48 @@ INTERFACE_PATTERN = re.compile(r"^wg[0-9]+$")
 # Default-deny conf allowlist: wg-quick runs Pre/PostUp/Down + SaveConfig as
 # root, so the agent accepts only these inert keys and rejects everything else
 # (a compromised worker owns the render dir and must not smuggle in directives).
+# PostUp/PostDown ARE accepted, but their values are constrained to validated
+# iptables/ip6tables calls (see _assert_firewall_directive) — they are the one
+# directive this app needs and the only place a root command may reach the shell.
 CONF_SECTION_KEYS = {
-	"interface": {"privatekey", "address", "listenport", "mtu", "dns"},
+	"interface": {"privatekey", "address", "listenport", "mtu", "dns", "postup", "postdown"},
 	"peer": {"publickey", "presharedkey", "allowedips", "endpoint", "persistentkeepalive"},
+}
+FIREWALL_KEYS = {"postup", "postdown"}
+FIREWALL_COMMANDS = {"iptables", "ip6tables"}
+# A single iptables token: no shell metacharacters at all, only what iptables
+# match/target args use (flags, interfaces, addrs/CIDRs, port lists, targets).
+IPTABLES_TOKEN = re.compile(r"^[A-Za-z0-9_./,:+=-]+$")
+# Shell connectors wg-quick honours between commands; each side is still validated
+# as a full iptables command, so they cannot smuggle a non-iptables call (the
+# idempotent ``-C … || -A …`` the app renders relies on ``||``).
+FIREWALL_SEPARATOR = re.compile(r";|\|\||&&")
+# Semantic allowlist: even a shell-safe iptables call is root-powerful, so we
+# constrain it to the rule shapes this app emits — add/delete/check on the
+# forward/NAT chains with an inert target. This stops a worker that owns the conf
+# from flushing rules (-F/-X/-Z), setting a chain policy (-P), opening INPUT, or
+# installing a DNAT/SNAT redirect, all of which otherwise pass IPTABLES_TOKEN.
+FIREWALL_ACTIONS = {"-A", "-D", "-C"}
+FIREWALL_TABLES = {"filter", "nat"}
+FIREWALL_CHAINS = {"FORWARD", "POSTROUTING", "PREROUTING"}
+FIREWALL_TARGETS = {"ACCEPT", "DROP", "RETURN", "MASQUERADE", "REDIRECT"}
+FIREWALL_FORBIDDEN = {
+	"-F",
+	"--flush",
+	"-P",
+	"--policy",
+	"-X",
+	"--delete-chain",
+	"-Z",
+	"--zero",
+	"-N",
+	"--new-chain",
+	"-E",
+	"--rename-chain",
+	"-R",
+	"--replace",
+	"-I",
+	"--insert",
 }
 MAX_REQUEST = 64 * 1024
 MAX_CONF = 64 * 1024
@@ -90,6 +129,54 @@ def _assert_conf_safe_text(text):
 		key = line.split("=", 1)[0].strip().lower()
 		if key not in CONF_SECTION_KEYS[section]:
 			raise ValueError(f"conf key not allowed in [{section}]: {key!r}")
+		if key in FIREWALL_KEYS:
+			_assert_firewall_directive(line.split("=", 1)[1].strip())
+
+
+def _assert_firewall_directive(value):
+	"""Allow ONLY constrained iptables/ip6tables calls in a PostUp/PostDown value.
+
+	wg-quick runs PostUp/PostDown through a shell, so an unconstrained value is
+	root code execution. Two layers: (1) shell safety — split on the connectors
+	wg-quick honours and require every token of every command to be a bare
+	iptables token (no metacharacter survives :data:`IPTABLES_TOKEN`); (2) iptables
+	semantics — each command must be an add/delete/check on a forward/NAT chain
+	with an inert target (:func:`_assert_firewall_command`), so a worker that owns
+	the render dir still cannot flush rules, open INPUT, or install a DNAT as root.
+	"""
+	saw_command = False
+	for command in FIREWALL_SEPARATOR.split(value):
+		tokens = command.split()
+		if not tokens:
+			continue
+		saw_command = True
+		_assert_firewall_command(tokens)
+	if not saw_command:
+		raise ValueError("empty firewall directive")
+
+
+def _assert_firewall_command(tokens):
+	if tokens[0] not in FIREWALL_COMMANDS:
+		raise ValueError(f"firewall directive must be iptables/ip6tables: {tokens!r}")
+	for token in tokens[1:]:
+		if not IPTABLES_TOKEN.match(token):
+			raise ValueError(f"unsafe firewall token: {token!r}")
+		if token in FIREWALL_FORBIDDEN:
+			raise ValueError(f"forbidden iptables operation: {token!r}")
+	_assert_one_value_in(tokens, FIREWALL_ACTIONS, FIREWALL_CHAINS, "chain")
+	_assert_one_value_in(tokens, {"-j"}, FIREWALL_TARGETS, "target")
+	if "-t" in tokens:
+		_assert_one_value_in(tokens, {"-t"}, FIREWALL_TABLES, "table")
+
+
+def _assert_one_value_in(tokens, flags, allowed, label):
+	"""Require exactly one of ``flags``, with its following token inside ``allowed``."""
+	positions = [index for index, token in enumerate(tokens) if token in flags]
+	if len(positions) != 1:
+		raise ValueError(f"firewall command needs exactly one {'/'.join(sorted(flags))}")
+	index = positions[0]
+	if index + 1 >= len(tokens) or tokens[index + 1] not in allowed:
+		raise ValueError(f"firewall {label} not allowed")
 
 
 def assert_conf_safe(path):
@@ -199,11 +286,13 @@ def handle_syncconf(args):
 def handle_show(args):
 	if not args:
 		return run(["wg", "show", "interfaces"])
-	if len(args) != 1:
-		raise ValueError("show takes at most one interface")
 	iface = args[0]
 	assert_iface(iface)
-	return run(["wg", "show", iface])
+	if len(args) == 1:
+		return run(["wg", "show", iface])
+	if len(args) == 2 and args[1] == "dump":
+		return run(["wg", "show", iface, "dump"])
+	raise ValueError("show takes an interface and an optional 'dump'")
 
 
 HANDLERS = {"up": handle_up, "syncconf": handle_syncconf, "show": handle_show}

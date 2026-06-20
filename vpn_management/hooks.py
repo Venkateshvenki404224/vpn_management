@@ -149,23 +149,14 @@ after_install = "vpn_management.install.after_install"
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"vpn_management.tasks.all"
-# 	],
-# 	"daily": [
-# 		"vpn_management.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"vpn_management.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"vpn_management.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"vpn_management.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"cron": {
+		# Read live handshake/rx/tx back onto peers every 5 minutes.
+		"*/5 * * * *": ["vpn_management.tasks.poll_status"],
+		# Drift-correct the fleet and re-converge from the DB every 10 minutes.
+		"*/10 * * * *": ["vpn_management.tasks.reconcile_all"],
+	},
+}
 
 # Testing
 # -------
@@ -247,9 +238,12 @@ after_install = "vpn_management.install.after_install"
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
 
-# default_log_clearing_doctypes = {
-# 	"Logging DocType Name": 30  # days to retain logs
-# }
+# The poll/reconcile crons append to VPN Audit Log continuously; retain 90 days.
+# Frappe's daily log clean-up prunes rows past this via the controller's
+# clear_old_logs LogType hook (VPNAuditLog.clear_old_logs).
+default_log_clearing_doctypes = {
+	"VPN Audit Log": 90,
+}
 
 # Translation
 # ------------

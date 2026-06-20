@@ -117,6 +117,78 @@ class ConfSafeTests(unittest.TestCase):
 				with self.assertRaises(ValueError):
 					agentd.assert_conf_safe(self._write(base, body))
 
+	def test_accepts_iptables_postup_postdown(self):
+		body = (
+			"[Interface]\nPrivateKey = AAAA\nAddress = 10.0.0.1/24\n"
+			"PostUp = iptables -t filter -A FORWARD -i wg0 -j ACCEPT\n"
+			"PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE\n"
+			"PostUp = iptables -t nat -A PREROUTING -p udp -m multiport --dport 333,666,999 -j REDIRECT --to-ports 44556\n"
+			"PostDown = iptables -t filter -D FORWARD -i wg0 -j ACCEPT\n"
+		)
+		with tempfile.TemporaryDirectory() as base:
+			agentd.assert_conf_safe(self._write(base, body))
+
+	def test_rejects_postup_with_smuggled_command(self):
+		body = "[Interface]\nPrivateKey = AAAA\nPostUp = iptables -A FORWARD -j ACCEPT; rm -rf /\n"
+		with tempfile.TemporaryDirectory() as base:
+			with self.assertRaises(ValueError):
+				agentd.assert_conf_safe(self._write(base, body))
+
+
+class FirewallDirectiveTests(unittest.TestCase):
+	def test_accepts_iptables_and_ip6tables(self):
+		agentd._assert_firewall_directive("iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE")
+		agentd._assert_firewall_directive("ip6tables -A FORWARD -i wg0 -j ACCEPT")
+		# Multiple iptables commands chained with the wg-quick ';' separator.
+		agentd._assert_firewall_directive(
+			"iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT"
+		)
+
+	def test_accepts_idempotent_check_or_add(self):
+		# The app renders check-then-add ('-C … || -A …'); '||' joins two iptables calls.
+		agentd._assert_firewall_directive(
+			"iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE "
+			"|| iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE"
+		)
+		agentd._assert_firewall_directive(
+			"iptables -t nat -C PREROUTING -p udp -m multiport --dport 333,666 -j REDIRECT --to-ports 44556 "
+			"|| iptables -t nat -A PREROUTING -p udp -m multiport --dport 333,666 -j REDIRECT --to-ports 44556"
+		)
+
+	def test_rejects_dangerous_iptables_semantics(self):
+		# Shell-safe but root-powerful iptables that a compromised worker must not run.
+		for bad in [
+			"iptables -F",
+			"iptables -t nat -F",
+			"iptables -X",
+			"iptables -Z",
+			"iptables -P INPUT ACCEPT",
+			"iptables -A INPUT -j ACCEPT",
+			"iptables -A OUTPUT -j ACCEPT",
+			"iptables -t nat -A PREROUTING -p tcp --dport 443 -j DNAT --to-destination 1.2.3.4",
+			"iptables -t mangle -A FORWARD -j ACCEPT",
+			"iptables -I FORWARD -j ACCEPT",
+			"iptables -A FORWARD -i wg0 -j ACCEPT; iptables -F",
+		]:
+			with self.assertRaises(ValueError):
+				agentd._assert_firewall_directive(bad)
+
+	def test_rejects_non_iptables_command(self):
+		for bad in ["id", "bash -c id", "iptables -A FORWARD -j ACCEPT; reboot", ""]:
+			with self.assertRaises(ValueError):
+				agentd._assert_firewall_directive(bad)
+
+	def test_rejects_shell_metacharacters(self):
+		for bad in [
+			"iptables -A FORWARD -j ACCEPT && reboot",
+			"iptables -A FORWARD -j ACCEPT | sh",
+			"iptables -A FORWARD $(reboot)",
+			"iptables -A FORWARD `reboot`",
+			"iptables -A FORWARD -j ACCEPT > /etc/passwd",
+		]:
+			with self.assertRaises(ValueError):
+				agentd._assert_firewall_directive(bad)
+
 
 class DispatchTests(unittest.TestCase):
 	def setUp(self):
@@ -147,6 +219,15 @@ class DispatchTests(unittest.TestCase):
 	def test_show_without_args_lists_interfaces(self):
 		agentd.dispatch(b'{"verb":"show","args":[]}')
 		self.assertEqual(self.calls, [["wg", "show", "interfaces"]])
+
+	def test_show_interface_dump(self):
+		agentd.dispatch(b'{"verb":"show","args":["wg0","dump"]}')
+		self.assertEqual(self.calls, [["wg", "show", "wg0", "dump"]])
+
+	def test_show_rejects_unknown_subcommand(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb":"show","args":["wg0","garbage"]}')
+		self.assertEqual(self.calls, [])
 
 	def test_up_rejects_bad_interface_before_running(self):
 		with self.assertRaises(ValueError):
