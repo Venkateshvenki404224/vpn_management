@@ -86,7 +86,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "vpn_management.install.before_install"
-# after_install = "vpn_management.install.after_install"
+after_install = "vpn_management.install.after_install"
 
 # Uninstallation
 # ------------
@@ -255,4 +255,3 @@ app_license = "mit"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

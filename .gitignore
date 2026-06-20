@@ -59,3 +59,4 @@ jspm_packages/
 specs/
 plan.md
 .serena
+.claude/memory/

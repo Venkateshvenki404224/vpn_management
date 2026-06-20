@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Unit tests for the wg-agent security boundary.
+
+``agentd`` is a standalone script (no ``.py`` extension) that runs in the
+sidecar, so it is loaded here by path. These tests cover *only* validation —
+they never shell out — and run with plain stdlib::
+
+    python3 deploy/wg-agent/test_agentd.py
+"""
+
+import importlib.util
+import os
+import tempfile
+import unittest
+from importlib.machinery import SourceFileLoader
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_agentd():
+	# `agentd` has no .py extension, so bind a source loader explicitly.
+	loader = SourceFileLoader("agentd", os.path.join(_HERE, "agentd"))
+	spec = importlib.util.spec_from_loader("agentd", loader)
+	module = importlib.util.module_from_spec(spec)
+	loader.exec_module(module)
+	return module
+
+
+agentd = _load_agentd()
+
+
+class InterfaceValidationTests(unittest.TestCase):
+	def test_accepts_canonical_interfaces(self):
+		agentd.assert_iface("wg0")
+		agentd.assert_iface("wg21")
+
+	def test_rejects_injection_and_garbage(self):
+		for bad in ["wg0; rm -rf /", "wg0 && reboot", "wg0/../etc", "eth0", "wg", "", "WG0", 0, None]:
+			with self.assertRaises(ValueError):
+				agentd.assert_iface(bad)
+
+
+class ConfPathTests(unittest.TestCase):
+	def test_rejects_path_outside_dir(self):
+		with tempfile.TemporaryDirectory() as base:
+			with self.assertRaises(ValueError):
+				agentd.assert_under_dir("/etc/passwd", base)
+
+	def test_rejects_symlink_escape(self):
+		with tempfile.TemporaryDirectory() as base:
+			link = os.path.join(base, "wg0.conf")
+			os.symlink("/etc/passwd", link)
+			with self.assertRaises(ValueError):
+				agentd.assert_under_dir(link, base)
+
+	def test_rejects_world_readable_conf(self):
+		with tempfile.TemporaryDirectory() as base:
+			path = os.path.join(base, "wg0.conf")
+			open(path, "w").close()
+			os.chmod(path, 0o644)
+			with self.assertRaises(ValueError):
+				agentd.assert_conf_ready(path)
+
+	def test_rejects_missing_conf(self):
+		with self.assertRaises(OSError):
+			agentd.assert_conf_ready("/nonexistent/wg0.conf")
+
+	def test_accepts_owner_only_conf(self):
+		with tempfile.TemporaryDirectory() as base:
+			path = os.path.join(base, "wg0.conf")
+			open(path, "w").close()
+			os.chmod(path, 0o600)
+			agentd.assert_conf_ready(path)
+
+
+class ConfSafeTests(unittest.TestCase):
+	def _write(self, base, body):
+		path = os.path.join(base, "wg0.conf")
+		with open(path, "w") as handle:
+			handle.write(body)
+		os.chmod(path, 0o600)
+		return path
+
+	def test_accepts_inert_interface_conf(self):
+		with tempfile.TemporaryDirectory() as base:
+			path = self._write(
+				base, "[Interface]\nPrivateKey = AAAA\nAddress = 10.0.0.1/24\nListenPort = 51820\n"
+			)
+			agentd.assert_conf_safe(path)
+
+	def test_rejects_postup_directive(self):
+		with tempfile.TemporaryDirectory() as base:
+			path = self._write(base, "[Interface]\nPrivateKey = AAAA\nPostUp = bash -c 'id'\n")
+			with self.assertRaises(ValueError):
+				agentd.assert_conf_safe(path)
+
+	def test_rejects_saveconfig_and_unknown_section(self):
+		with tempfile.TemporaryDirectory() as base:
+			for body in ["[Interface]\nSaveConfig = true\n", "[Evil]\nPrivateKey = AAAA\n"]:
+				with self.assertRaises(ValueError):
+					agentd.assert_conf_safe(self._write(base, body))
+
+
+class DispatchTests(unittest.TestCase):
+	def setUp(self):
+		self._original_run = agentd.run
+		self.calls = []
+		agentd.run = lambda command: self.calls.append(command) or {"ok": True}
+
+	def tearDown(self):
+		agentd.run = self._original_run
+
+	def test_unknown_verb_rejected(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb": "destroy", "args": []}')
+
+	def test_oversized_payload_rejected(self):
+		payload = b'{"verb":"show","args":[]}' + b" " * (agentd.MAX_REQUEST + 1)
+		with self.assertRaises(ValueError):
+			agentd.dispatch(payload)
+
+	def test_non_object_request_rejected(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'["show"]')
+
+	def test_args_must_be_a_list(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb":"show","args":"wg0"}')
+
+	def test_show_without_args_lists_interfaces(self):
+		agentd.dispatch(b'{"verb":"show","args":[]}')
+		self.assertEqual(self.calls, [["wg", "show", "interfaces"]])
+
+	def test_up_rejects_bad_interface_before_running(self):
+		with self.assertRaises(ValueError):
+			agentd.dispatch(b'{"verb":"up","args":["wg0; rm -rf /"]}')
+		self.assertEqual(self.calls, [])
+
+	def test_up_rejects_conf_with_directive_before_running(self):
+		original = agentd.WG_DIR
+		with tempfile.TemporaryDirectory() as base:
+			agentd.WG_DIR = base
+			path = os.path.join(base, "wg0.conf")
+			with open(path, "w") as handle:
+				handle.write("[Interface]\nPrivateKey = AAAA\nPostUp = bash -c 'id'\n")
+			os.chmod(path, 0o600)
+			try:
+				with self.assertRaises(ValueError):
+					agentd.dispatch(b'{"verb":"up","args":["wg0"]}')
+				self.assertEqual(self.calls, [])
+			finally:
+				agentd.WG_DIR = original
+
+
+if __name__ == "__main__":
+	unittest.main()

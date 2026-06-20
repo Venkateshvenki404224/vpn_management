@@ -1,0 +1,145 @@
+{
+ "actions": [],
+ "autoname": "field:interface_name",
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "interface_name",
+  "listen_port",
+  "environment",
+  "address_cidr",
+  "egress_interface",
+  "keys_section",
+  "server_public_key",
+  "server_private_key",
+  "state_section",
+  "provisioned",
+  "enabled",
+  "status",
+  "interface_up",
+  "last_reconcile"
+ ],
+ "fields": [
+  {
+   "description": "Kernel interface name, e.g. wg0.",
+   "fieldname": "interface_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Interface Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "44556",
+   "fieldname": "listen_port",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Listen Port"
+  },
+  {
+   "default": "dev",
+   "fieldname": "environment",
+   "fieldtype": "Select",
+   "label": "Environment",
+   "options": "dev\nprod"
+  },
+  {
+   "description": "Computed from the environment when left blank.",
+   "fieldname": "address_cidr",
+   "fieldtype": "Data",
+   "label": "Address CIDR"
+  },
+  {
+   "default": "eth0",
+   "fieldname": "egress_interface",
+   "fieldtype": "Data",
+   "label": "Egress Interface"
+  },
+  {
+   "fieldname": "keys_section",
+   "fieldtype": "Section Break",
+   "label": "Keys"
+  },
+  {
+   "fieldname": "server_public_key",
+   "fieldtype": "Data",
+   "label": "Server Public Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "server_private_key",
+   "fieldtype": "Password",
+   "label": "Server Private Key",
+   "permlevel": 1,
+   "read_only": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "state_section",
+   "fieldtype": "Section Break",
+   "label": "State"
+  },
+  {
+   "default": "0",
+   "fieldname": "provisioned",
+   "fieldtype": "Check",
+   "label": "Provisioned",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "Down",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Down\nUp\nError",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "interface_up",
+   "fieldtype": "Check",
+   "label": "Interface Up",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_reconcile",
+   "fieldtype": "Datetime",
+   "label": "Last Reconcile",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "WireGuard Server",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

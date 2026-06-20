@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""Root-run unix-socket server that fronts a closed set of WireGuard verbs.
+
+This is the security boundary between the unprivileged Frappe workers and the
+host kernel. It runs as root inside the host-networked ``wg-agent`` sidecar,
+accepts a JSON ``{"verb": ..., "args": [...]}`` request over a unix socket, and
+re-validates *every* argument before shelling out. Nothing the worker sends is
+trusted: the verb must be in :data:`ALLOWED_VERBS`, interfaces must match
+``^wg[0-9]+$``, and conf files must resolve under :data:`WG_DIR` at mode 600.
+
+Phase 1 implements two verbs: ``up <iface>`` and ``show [<iface>]``.
+"""
+
+import json
+import os
+import re
+import socket
+import stat
+import subprocess
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+WG_DIR = "/etc/wireguard"
+SOCKET_DIR = "/run/wg-agent"
+SOCKET_PATH = os.path.join(SOCKET_DIR, "agent.sock")
+# uid allowed to use the socket. The container's frappe user is 1000; a
+# standalone install passes the real bench uid via WG_AGENT_SOCKET_UID.
+SOCKET_UID = int(os.environ.get("WG_AGENT_SOCKET_UID", "1000"))
+
+ALLOWED_VERBS = ("up", "show")
+INTERFACE_PATTERN = re.compile(r"^wg[0-9]+$")
+# Default-deny conf allowlist: wg-quick runs Pre/PostUp/Down + SaveConfig as
+# root, so the agent accepts only these inert keys and rejects everything else
+# (a compromised worker owns the render dir and must not smuggle in directives).
+CONF_SECTION_KEYS = {
+	"interface": {"privatekey", "address", "listenport", "mtu", "dns"},
+	"peer": {"publickey", "presharedkey", "allowedips", "endpoint", "persistentkeepalive"},
+}
+MAX_REQUEST = 64 * 1024
+COMMAND_TIMEOUT = 30
+MAX_WORKERS = 8
+MAX_INFLIGHT = 32
+
+
+def assert_iface(iface):
+	"""Reject anything that is not a canonical ``wg<number>`` interface name."""
+	if not isinstance(iface, str) or not INTERFACE_PATTERN.match(iface):
+		raise ValueError(f"invalid interface: {iface!r}")
+
+
+def assert_under_dir(path, base):
+	"""Return the real path, asserting it stays inside ``base`` (no symlink escape)."""
+	real = os.path.realpath(path)
+	base_real = os.path.realpath(base)
+	if os.path.commonpath([real, base_real]) != base_real:
+		raise ValueError(f"path escapes {base_real}: {path!r}")
+	return real
+
+
+def conf_path_for(iface):
+	"""Map an interface to its conf path under :data:`WG_DIR`, escape-checked."""
+	assert_iface(iface)
+	return assert_under_dir(os.path.join(WG_DIR, f"{iface}.conf"), WG_DIR)
+
+
+def assert_conf_ready(path):
+	"""Require the conf to exist as a regular, owner-only (mode 600) file."""
+	info = os.stat(path)
+	if not stat.S_ISREG(info.st_mode):
+		raise ValueError(f"conf is not a regular file: {path!r}")
+	if stat.S_IMODE(info.st_mode) != 0o600:
+		raise ValueError(f"conf must be mode 600: {path!r}")
+
+
+def assert_conf_safe(path):
+	"""Reject a conf that carries any key outside the inert allowlist.
+
+	The worker owns the render dir, so the body is untrusted: this is what stops
+	a smuggled ``PostUp``/``SaveConfig`` from running as root under wg-quick.
+	"""
+	section = None
+	with open(path, encoding="utf-8") as handle:
+		for raw_line in handle:
+			line = raw_line.split("#", 1)[0].strip()
+			if not line:
+				continue
+			if line.startswith("[") and line.endswith("]"):
+				section = line[1:-1].strip().lower()
+				if section not in CONF_SECTION_KEYS:
+					raise ValueError(f"conf has an unknown section: {line!r}")
+				continue
+			if section is None or "=" not in line:
+				raise ValueError(f"conf has a malformed line: {raw_line.strip()!r}")
+			key = line.split("=", 1)[0].strip().lower()
+			if key not in CONF_SECTION_KEYS[section]:
+				raise ValueError(f"conf key not allowed in [{section}]: {key!r}")
+
+
+def run(command):
+	"""Run a validated command, returning a JSON-serialisable result envelope."""
+	completed = subprocess.run(command, capture_output=True, text=True, timeout=COMMAND_TIMEOUT)
+	return {
+		"ok": completed.returncode == 0,
+		"code": completed.returncode,
+		"stdout": completed.stdout,
+		"stderr": completed.stderr,
+	}
+
+
+def handle_up(args):
+	if len(args) != 1:
+		raise ValueError("up takes exactly one interface")
+	iface = args[0]
+	path = conf_path_for(iface)
+	assert_conf_ready(path)
+	assert_conf_safe(path)
+	return run(["wg-quick", "up", iface])
+
+
+def handle_show(args):
+	if not args:
+		return run(["wg", "show", "interfaces"])
+	if len(args) != 1:
+		raise ValueError("show takes at most one interface")
+	iface = args[0]
+	assert_iface(iface)
+	return run(["wg", "show", iface])
+
+
+HANDLERS = {"up": handle_up, "show": handle_show}
+
+
+def dispatch(raw):
+	"""Validate a raw request payload and route it to its handler."""
+	if len(raw) > MAX_REQUEST:
+		raise ValueError("payload too large")
+	message = json.loads(raw.decode("utf-8"))
+	if not isinstance(message, dict):
+		raise ValueError("request must be a JSON object")
+	verb = message.get("verb")
+	if verb not in ALLOWED_VERBS:
+		raise ValueError(f"unknown verb: {verb!r}")
+	args = message.get("args", [])
+	if not isinstance(args, list):
+		raise ValueError("args must be a list")
+	return HANDLERS[verb](args)
+
+
+def _read_request(connection):
+	# Enforce a total wall-clock deadline so a trickle client cannot hold the
+	# connection (and its worker slot) open past COMMAND_TIMEOUT.
+	deadline = time.monotonic() + COMMAND_TIMEOUT
+	chunks = []
+	size = 0
+	while True:
+		remaining = deadline - time.monotonic()
+		if remaining <= 0:
+			raise ValueError("request read timed out")
+		connection.settimeout(remaining)
+		chunk = connection.recv(65536)
+		if not chunk:
+			break
+		size += len(chunk)
+		if size > MAX_REQUEST:
+			raise ValueError("payload too large")
+		chunks.append(chunk)
+	return b"".join(chunks)
+
+
+def _serve_connection(connection, inflight=None):
+	try:
+		with connection:
+			connection.settimeout(COMMAND_TIMEOUT)
+			try:
+				reply = dispatch(_read_request(connection))
+			except ValueError as error:
+				reply = {"ok": False, "error": str(error)}
+			except Exception as error:  # never crash the listener
+				reply = {"ok": False, "error": f"agent error: {error}"}
+			try:
+				connection.sendall(json.dumps(reply).encode("utf-8"))
+				connection.shutdown(socket.SHUT_WR)
+			except OSError:
+				pass
+	finally:
+		if inflight is not None:
+			inflight.release()
+
+
+def _bind_socket():
+	os.makedirs(SOCKET_DIR, exist_ok=True)
+	if os.path.exists(SOCKET_PATH):
+		os.unlink(SOCKET_PATH)
+	server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+	server.bind(SOCKET_PATH)
+	os.chown(SOCKET_PATH, SOCKET_UID, SOCKET_UID)
+	os.chmod(SOCKET_PATH, 0o600)
+	server.listen(16)
+	return server
+
+
+def serve():
+	server = _bind_socket()
+	# Bounded pool + in-flight semaphore: a stuck/slow client cannot grow threads
+	# or FDs without limit; excess connections are shed immediately.
+	inflight = threading.Semaphore(MAX_INFLIGHT)
+	with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+		while True:
+			connection, _ = server.accept()
+			if not inflight.acquire(blocking=False):
+				connection.close()
+				continue
+			pool.submit(_serve_connection, connection, inflight)
+
+
+if __name__ == "__main__":
+	serve()

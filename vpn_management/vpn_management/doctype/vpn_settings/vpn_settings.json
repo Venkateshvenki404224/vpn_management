@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "environment",
+  "egress_interface",
+  "default_listen_port",
+  "wg_dir",
+  "vpn_endpoint_host"
+ ],
+ "fields": [
+  {
+   "default": "dev",
+   "fieldname": "environment",
+   "fieldtype": "Select",
+   "label": "Environment",
+   "options": "dev\nprod",
+   "reqd": 1
+  },
+  {
+   "default": "eth0",
+   "fieldname": "egress_interface",
+   "fieldtype": "Data",
+   "label": "Egress Interface"
+  },
+  {
+   "default": "44556",
+   "fieldname": "default_listen_port",
+   "fieldtype": "Int",
+   "label": "Default Listen Port"
+  },
+  {
+   "default": "/etc/wireguard",
+   "description": "Shared render directory; must match the wg-agent mount.",
+   "fieldname": "wg_dir",
+   "fieldtype": "Data",
+   "label": "WireGuard Config Directory"
+  },
+  {
+   "fieldname": "vpn_endpoint_host",
+   "fieldtype": "Data",
+   "label": "VPN Endpoint Host"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "VPN Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Prepare the shared dirs, then hand off to the agent (PID 1, runs as root).
+set -e
+
+# The frappe-uid worker renders interface confs into the shared wireguard dir,
+# so it must own it; agentd (root) and wg-quick (root) still read it freely.
+mkdir -p /etc/wireguard /run/wg-agent
+chown 1000:1000 /etc/wireguard
+chmod 0700 /etc/wireguard
+
+exec python3 /opt/wg-agent/agentd
