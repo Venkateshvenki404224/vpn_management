@@ -53,3 +53,9 @@ jspm_packages/
 
 # Aider AI Chat
 .aider*
+
+
+# Spec 
+specs/
+plan.md
+.serena
