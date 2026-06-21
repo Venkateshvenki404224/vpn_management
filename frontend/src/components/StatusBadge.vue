@@ -14,10 +14,12 @@ const props = defineProps({
 const THEMES = {
 	Active: "green",
 	Provisioned: "green",
+	Up: "green",
 	Pending: "blue",
 	Stale: "orange",
 	Revoked: "red",
 	Error: "red",
+	Down: "gray",
 	Disabled: "gray",
 };
 
