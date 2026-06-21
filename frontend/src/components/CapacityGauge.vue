@@ -67,6 +67,14 @@ const gaugeStep = computed(() =>
 </script>
 
 <style scoped>
+/* CircularProgressBar positions its ring/label with `z-index: 2/3`, which leaks
+   into the page's root stacking context and paints the "NN%" label ABOVE a
+   teleported Dialog overlay (it has no positive z-index of its own). Give the
+   gauge its own stacking context so those inner z-indexes stay contained and the
+   modal always covers it. */
+.gauge {
+  isolation: isolate;
+}
 /* CircularProgressBar hard-codes a white center disc and inherits its label
    color, so in dark mode the (now light) "NN%" text sits on white and vanishes.
    Pin the disc to the card surface token and the label to a strong ink token so

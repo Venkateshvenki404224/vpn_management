@@ -46,6 +46,11 @@ from vpn_management.api.peers import (
 	regenerate_keys,
 	revoke_peer,
 )
+from vpn_management.api.settings import (
+	SAFE_SETTINGS_FIELDS,
+	get_vpn_settings,
+	upsert_vpn_settings,
+)
 from vpn_management.dashboard import dashboard_summary
 
 # Private render helpers the test-suite reaches through the facade (reads/calls).
@@ -64,6 +69,7 @@ __all__ = [
 	"SAFE_POOL_FIELDS",
 	"SAFE_RESERVED_FIELDS",
 	"SAFE_SERVER_FIELDS",
+	"SAFE_SETTINGS_FIELDS",
 	"SERVER_FORM_FIELDS",
 	"create_peer",
 	"dashboard_summary",
@@ -72,6 +78,7 @@ __all__ = [
 	"get_peer_status",
 	"get_pool",
 	"get_server",
+	"get_vpn_settings",
 	"interface_status",
 	"list_ip_allocations",
 	"list_peers",
@@ -86,4 +93,5 @@ __all__ = [
 	"sync_network",
 	"upsert_pool",
 	"upsert_server",
+	"upsert_vpn_settings",
 ]

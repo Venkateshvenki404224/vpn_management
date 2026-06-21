@@ -114,7 +114,8 @@ import {
   LoadingIndicator,
   createResource,
 } from "frappe-ui";
-import { computed, onUnmounted, reactive, ref } from "vue";
+import { computed, onUnmounted, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
@@ -185,4 +186,28 @@ async function submitCreate(close) {
   close();
   refresh();
 }
+
+// The command palette deep-links here: `?new=1` opens the create dialog and
+// `?focus=PEER-x` opens that peer's drawer (once the list has loaded). The query
+// is cleared after acting so it doesn't re-fire on refresh or back-navigation.
+const route = useRoute();
+const router = useRouter();
+watch(
+  [() => route.query, peerRows],
+  () => {
+    if (route.query.new) {
+      showCreate.value = true;
+      router.replace({ query: {} });
+      return;
+    }
+    const focus = route.query.focus;
+    if (!focus) return;
+    const peer = peerRows.value.find((row) => row.name === focus);
+    if (peer) {
+      openDrawer(peer);
+      router.replace({ query: {} });
+    }
+  },
+  { immediate: true, deep: true }
+);
 </script>
