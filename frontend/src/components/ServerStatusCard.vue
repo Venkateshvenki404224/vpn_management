@@ -1,13 +1,25 @@
 <template>
-  <div class="rounded-lg border border-outline-gray-2 bg-surface-white p-4">
-    <div class="flex items-center justify-between gap-2">
-      <span class="font-mono text-sm font-medium text-ink-gray-9">{{
-        server.interface_name
-      }}</span>
+  <div
+    class="flex flex-col rounded-lg border border-outline-gray-2 bg-surface-white transition-shadow hover:shadow-sm"
+  >
+    <!-- Header: interface name + status badge, framed like the chart cards. -->
+    <div
+      class="flex items-center justify-between gap-2 border-b border-outline-gray-1 px-4 py-3"
+    >
+      <div class="flex items-center gap-2">
+        <span
+          class="size-2 shrink-0 rounded-full"
+          :class="server.interface_up ? 'bg-surface-green-3' : 'bg-surface-gray-4'"
+          aria-hidden="true"
+        />
+        <span class="font-mono text-sm font-medium text-ink-gray-9">{{
+          server.interface_name
+        }}</span>
+      </div>
       <StatusBadge :status="server.status" />
     </div>
 
-    <dl class="mt-3 space-y-1 text-sm text-ink-gray-6">
+    <dl class="flex-1 space-y-2 px-4 py-3 text-sm text-ink-gray-6">
       <div class="flex justify-between gap-2">
         <dt>Address</dt>
         <dd class="font-mono text-ink-gray-7">{{ server.address_cidr || "—" }}</dd>
@@ -22,11 +34,16 @@
       </div>
       <div class="flex justify-between gap-2">
         <dt>Last reconcile</dt>
-        <dd>{{ relativeTime(server.last_reconcile) }}</dd>
+        <dd :title="absoluteTime(server.last_reconcile)">
+          {{ relativeTime(server.last_reconcile) }}
+        </dd>
       </div>
     </dl>
 
-    <div v-if="actions" class="mt-4 flex items-center gap-2">
+    <div
+      v-if="actions"
+      class="flex items-center gap-2 border-t border-outline-gray-1 px-4 py-3"
+    >
       <Button
         label="Reconcile"
         icon-left="lucide-refresh-cw"
@@ -46,7 +63,7 @@
 <script setup>
 import { Button, createResource, dialog, toast } from "frappe-ui";
 import StatusBadge from "@/components/StatusBadge.vue";
-import { relativeTime } from "@/utils/format";
+import { absoluteTime, relativeTime } from "@/utils/format";
 
 const props = defineProps({
   server: { type: Object, required: true },

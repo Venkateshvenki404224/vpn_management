@@ -21,6 +21,7 @@ import { computed, ref, watch } from "vue";
 import { Sidebar } from "frappe-ui";
 import { isAdmin, logout, session } from "@/data/session";
 import { theme, toggleTheme } from "@/data/theme";
+import { openPalette, openSettings, openShortcuts } from "@/data/ui";
 
 // Served from the app's public/ via the /assets symlink. Kept as a runtime
 // string so Vite doesn't try to resolve it as a build-time asset.
@@ -51,6 +52,20 @@ const header = computed(() => ({
   subtitle: session.user,
   logo: logoUrl,
   menuItems: [
+    // Admin-only settings modal (Help Desk / CRM settings-modal style).
+    ...(isAdmin.value
+      ? [{ label: "Settings", icon: "lucide-settings", onClick: openSettings }]
+      : []),
+    {
+      label: "Command palette",
+      icon: "lucide-search",
+      onClick: openPalette,
+    },
+    {
+      label: "Keyboard shortcuts",
+      icon: "lucide-keyboard",
+      onClick: openShortcuts,
+    },
     {
       label: theme.dark ? "Light mode" : "Dark mode",
       icon: theme.dark ? "lucide-sun" : "lucide-moon",
