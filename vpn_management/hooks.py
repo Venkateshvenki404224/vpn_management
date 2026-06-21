@@ -134,6 +134,23 @@ has_permission = {
 	"VPN Peer": "vpn_management.permissions.has_permission",
 }
 
+# The website (portal) layer for VPN Peer: a portal user reaches only their own.
+has_website_permission = {
+	"VPN Peer": "vpn_management.permissions.has_website_permission",
+}
+
+# Self-service portal
+# -------------------
+# /vpn serves www/vpn.html; the entry shows in the portal sidebar for VPN Users.
+
+website_route_rules = [
+	{"from_route": "/vpn", "to_route": "vpn"},
+]
+
+standard_portal_menu_items = [
+	{"title": "My VPN", "route": "/vpn", "reference_doctype": "VPN Peer", "role": "VPN User"},
+]
+
 # Fixtures
 # --------
 # Ship the four VPN roles (with their desk_access flags) so migrate keeps them in sync.

@@ -32,6 +32,18 @@ def has_permission(doc, ptype=None, user=None, debug=False):
 	return doc.get("owner_user") == user
 
 
+def has_website_permission(doc, ptype=None, user=None, verbose=False):
+	"""Website-layer guard: a portal user reaches only the VPN Peers they own.
+
+	The fourth isolation layer — it gates document access through the website
+	rendering path the same way :func:`has_permission` gates the desk/API path.
+	"""
+	user = user or frappe.session.user
+	if is_admin(user):
+		return True
+	return doc.get("owner_user") == user
+
+
 def is_admin(user):
 	"""True for unrestricted callers: Administrator, System Manager, or VPN Admin."""
 	if user == "Administrator":
