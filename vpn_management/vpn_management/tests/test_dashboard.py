@@ -1,13 +1,13 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Dashboard aggregation: admin-gated counts + 30-day trend, no key material."""
+"""Dashboard aggregation: admin-gated counts, deltas, capacity, and trends — no key material."""
 
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import cstr, getdate
 
-from vpn_management import dashboard
+from vpn_management import audit, dashboard
 from vpn_management.vpn_management.tests import fixtures
 
 
@@ -24,17 +24,23 @@ class TestDashboardSummary(IntegrationTestCase):
 
 	def _summary(self):
 		# The aggregation is cached ~60s; clear it so each call reflects the
-		# peers this test just created within its transaction.
+		# rows this test just created within its transaction.
 		dashboard._summary.clear_cache()
 		return dashboard.dashboard_summary()
 
-	def test_shape_has_counts_and_trend(self):
+	def test_shape_has_every_section(self):
 		result = self._summary()
-		self.assertIn("counts", result)
-		self.assertIn("peers_per_day", result)
+		for section in ("counts", "deltas", "servers", "ip_pool", "peers_per_day", "audit_per_day"):
+			self.assertIn(section, result)
 		for key in ("total", "active", "stale", "disabled", "revoked", "pending"):
 			self.assertIsInstance(result["counts"][key], int)
+			self.assertIsInstance(result["deltas"][key], int)
+		for key in ("up", "down", "error", "total"):
+			self.assertIsInstance(result["servers"][key], int)
+		for key in ("total", "allocated", "reserved", "free"):
+			self.assertIsInstance(result["ip_pool"][key], int)
 		self.assertIsInstance(result["peers_per_day"], list)
+		self.assertIsInstance(result["audit_per_day"], list)
 
 	def test_counts_track_new_peers_by_status(self):
 		before = self._summary()["counts"]
@@ -46,16 +52,50 @@ class TestDashboardSummary(IntegrationTestCase):
 		self.assertEqual(after["pending"], before["pending"] + 1)
 		self.assertEqual(after["revoked"], before["revoked"] + 1)
 
+	def test_deltas_count_recent_provisioning(self):
+		# Peers created "now" land in the recent 7-day window, so each lifts its delta.
+		before = self._summary()["deltas"]
+		fixtures.make_peer("wg8", peer_name="alice")
+		fixtures.make_peer("wg8", peer_name="bob")
+		after = self._summary()["deltas"]
+		self.assertEqual(after["total"], before["total"] + 2)
+		self.assertEqual(after["pending"], before["pending"] + 2)
+
+	def test_server_counts_reflect_status(self):
+		# setUp inserted one freshly created server (status defaults to "Down").
+		servers = self._summary()["servers"]
+		self.assertEqual(servers["total"], frappe.db.count("WireGuard Server"))
+		self.assertGreaterEqual(servers["down"], 1)
+
+	def test_ip_pool_tracks_allocation(self):
+		before = self._summary()["ip_pool"]
+		self.assertGreater(before["total"], 0)  # seed_pool materialized the /29
+		fixtures.make_peer("wg8", peer_name="alice")  # claims one IP on insert
+		after = self._summary()["ip_pool"]
+		self.assertEqual(after["allocated"], before["allocated"] + 1)
+		self.assertEqual(after["free"], before["free"] - 1)
+
 	def test_trend_buckets_todays_peer(self):
 		today = cstr(getdate())
-		before = self._today_count(self._summary()["peers_per_day"], today)
+		before = self._day_count(self._summary()["peers_per_day"], today)
 		fixtures.make_peer("wg8", peer_name="carol")
-		after = self._today_count(self._summary()["peers_per_day"], today)
+		after = self._day_count(self._summary()["peers_per_day"], today)
+		self.assertEqual(after, before + 1)
+
+	def test_audit_per_day_groups_by_result(self):
+		today = cstr(getdate())
+		before = self._audit_count(self._summary()["audit_per_day"], today, "success")
+		audit.record("reconcile", "wg8", "success")
+		after = self._audit_count(self._summary()["audit_per_day"], today, "success")
 		self.assertEqual(after, before + 1)
 
 	@staticmethod
-	def _today_count(rows, today):
+	def _day_count(rows, today):
 		return next((row["count"] for row in rows if row["day"] == today), 0)
+
+	@staticmethod
+	def _audit_count(rows, today, result):
+		return next((row["count"] for row in rows if row["day"] == today and row["result"] == result), 0)
 
 	def test_admin_gated_for_non_admin(self):
 		frappe.set_user("viewer@vpn.test")
