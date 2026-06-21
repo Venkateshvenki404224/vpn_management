@@ -18,6 +18,15 @@ while the kernel-touching half stays locked behind a single, minimal, validated 
 
 ---
 
+## Demo
+
+https://github.com/Venkateshvenki404224/vpn_management/raw/version-16/docs/images/demo.mp4
+
+> ▶️ A short walkthrough of the admin command center and the self-service portal. If the player
+> doesn't load in your viewer, [watch `docs/images/demo.mp4`](docs/images/demo.mp4) directly.
+
+---
+
 ## Why this exists
 
 The original WireGuard stack it replaces carried real scars: committed secrets, broad `www-data` sudo
