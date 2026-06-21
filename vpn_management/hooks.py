@@ -141,10 +141,12 @@ has_website_permission = {
 
 # Self-service portal
 # -------------------
-# /vpn serves www/vpn.html; the entry shows in the portal sidebar for VPN Users.
+# /vpn serves the frappe-ui SPA (www/vpn/index.html). The catch-all forwards every
+# client-side route (e.g. /vpn/my, /vpn/admin) to the same shell so deep links and
+# in-app refreshes resolve; bare /vpn is served by the www/vpn/ folder index.
 
 website_route_rules = [
-	{"from_route": "/vpn", "to_route": "vpn"},
+	{"from_route": "/vpn/<path:app_path>", "to_route": "vpn"},
 ]
 
 standard_portal_menu_items = [

@@ -1,4 +1,6 @@
-exclude: 'node_modules|.git'
+# Built SPA assets (public/frontend/*) and the generated SPA shell are build
+# artifacts — exclude them from every hook (same as the public/dist bundles).
+exclude: 'node_modules|.git|vpn_management/public/frontend|vpn_management/www/vpn/index.html'
 default_stages: [pre-commit]
 fail_fast: false
 
@@ -55,6 +57,7 @@ repos:
         # Ignore any files that might contain jinja / bundles
         exclude: |
             (?x)^(
+                frontend/.*|
                 vpn_management/public/dist/.*|
                 cypress/.*|
                 .*node_modules.*|

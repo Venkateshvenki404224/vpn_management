@@ -145,6 +145,16 @@ def regenerate_keys(name: str) -> dict:
 
 
 @frappe.whitelist(methods=["GET"])
+def list_servers() -> list[dict]:
+	"""List all servers (safe fields only) for the admin console — one query, no N+1."""
+	return frappe.get_list(
+		"WireGuard Server",
+		fields=list(SAFE_SERVER_FIELDS),
+		order_by="interface_name asc",
+	)
+
+
+@frappe.whitelist(methods=["GET"])
 def interface_status(interface_name: str) -> dict:
 	"""Return live interface status; never the server private key."""
 	server = frappe.get_doc("WireGuard Server", interface_name)

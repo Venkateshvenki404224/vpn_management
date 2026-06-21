@@ -79,6 +79,14 @@ class TestPeerApi(IntegrationTestCase):
 		self.assertNotIn("server_private_key", status)
 		self.assertEqual(status["interface_name"], "wg8")
 
+	def test_list_servers_returns_safe_fields_only(self):
+		servers = api.list_servers()
+		names = {row["interface_name"] for row in servers}
+		self.assertIn("wg8", names)
+		# The admin console row must never carry the server private key.
+		self.assertNotIn("server_private_key", servers[0])
+		self.assertEqual(set(servers[0].keys()), set(api.SAFE_SERVER_FIELDS))
+
 	def test_server_private_key_readable_only_by_vpn_admin(self):
 		# The spec's "server_private_key unreadable to every role but VPN Admin" —
 		# verified at the permission layer, not just the response allowlist.
