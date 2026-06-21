@@ -4,9 +4,9 @@
 
 **A clean-room WireGuard control plane, built as a reusable Frappe app.**
 
-Manage a fleet of WireGuard peers from the Frappe Desk, hand users a self-service portal for their own
-config + QR, and drive everything from a token-authenticated REST API — while the kernel-touching half
-stays locked behind a single, minimal, validated socket.
+Manage a fleet of WireGuard peers from a purpose-built **Frappe UI command center**, hand users a
+self-service portal for their own config + QR, and drive everything from a token-authenticated REST API —
+while the kernel-touching half stays locked behind a single, minimal, validated socket.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Frappe](https://img.shields.io/badge/Frappe-v16-0089FF.svg)
@@ -61,7 +61,7 @@ exist in the code.
 
 ```
    ┌─────────────── Frappe containers (bridge net, UNPRIVILEGED) ─────────────┐
-   │  Desk (VPN Admin) · Portal /vpn (VPN User) · REST /api (VPN API token)    │
+   │  SPA /vpn (VPN Admin console · VPN User portal) · REST /api (API token)   │
    │            DocTypes ── controllers ── api.py ── tasks.py                  │
    │                         │ frappe.enqueue(queue="long")                    │
    │             queue-long worker ── privileged.py                            │
@@ -124,44 +124,65 @@ is no `keygen`, `cat`, `git`, or arbitrary-exec surface to abuse.
 
 ## Interfaces
 
-### 1 · Desk admin (VPN Admin)
+Everything human-facing is one **Frappe UI single-page app served at `/vpn`** that adapts to the caller's
+role. The same sign-in lands a **VPN Admin** on a full-fleet command center and a **VPN User** on a
+self-service list of only the devices they own — the router guard and the five-layer isolation keep each
+role inside its own surface.
 
-Full fleet management from the Frappe Desk — create servers and peers, watch live status, inspect the
-audit trail.
+<p align="center">
+  <img src="docs/images/app-admin-vs-user.png" alt="Admin command center vs. user self-service portal" width="100%">
+</p>
 
-**WireGuard Server list** — one interface per row, with its live `status` and listen port.
+*Left: the admin command center at `/vpn/admin` — full sidebar, fleet-wide charts. Right: a user's portal at
+`/vpn/my-peers` — the sidebar collapses to a single entry and every request is owner-scoped. (Sample data
+shown for illustration throughout.)*
 
-![WireGuard Server list](docs/images/desk-wireguard-server-list.png)
+### 1 · Admin console (VPN Admin)
 
-**VPN Peer list** — every peer with its status, assigned IP, and server.
+The admin lands on a live **dashboard** — peer-status donut, IP-capacity gauge, per-day provisioning and
+audit trends, per-interface health cards, and a recent-activity feed, all refreshed on a 30-second poll.
 
-![VPN Peer list](docs/images/desk-vpn-peer-list.png)
+![VPN admin dashboard](docs/images/app-admin-dashboard.png)
 
-**VPN Peer form** — the full data model. Note the private key is a masked `Password` field; it is never
-shown in plaintext, listed, or returned by the API.
+**Servers & Peers** — a per-interface status table over a peer table with live presence dots, throughput,
+owner, status, and assigned IP. Create a peer inline, or open any row's detail drawer.
 
-![VPN Peer form](docs/images/desk-vpn-peer-form.png)
+![Servers and peers](docs/images/app-admin-servers-peers.png)
 
-**VPN Settings** — environment, egress interface, ports, and the firewall/redirect configuration in one
-Single.
+**Peer detail drawer** — identity, assigned IP, endpoint, allowed-IPs, live handshake/transfer, an inline QR
++ `.conf` download, and admin actions (regenerate keys · reconcile · revoke). The private key is never
+selected, listed, or returned.
 
-![VPN Settings](docs/images/desk-vpn-settings.png)
+![Peer detail drawer](docs/images/app-peer-detail-drawer.png)
+
+**IP allocation map** — every candidate address in a pool as a coloured cell (free · allocated · reserved),
+read straight off the never-bulk-deleted `IP Allocation` rows.
+
+![IP allocation map](docs/images/app-admin-ip-map.png)
+
+**Audit log** — the append-only privileged-action trail: actor, source IP, redacted argv, result, and the
+in-use allocation count captured at run time.
+
+![Audit log](docs/images/app-admin-audit.png)
+
+**Settings** — a CRM-style settings modal over the `VPN Settings` Single: environment defaults, firewall /
+redirect ports and DNS, and the sync kill-switches. The sync token lives in `site_config` and is never
+shown or editable here.
+
+![VPN settings modal](docs/images/app-admin-settings.png)
 
 ### 2 · Self-service portal (VPN User)
 
-A logged-in user visits `/vpn` and sees **only the peers they own**. Each card offers a one-click
-`.conf` download and a QR code to scan directly into the WireGuard mobile app. No key material is ever
-selected by the portal query.
+A VPN User signs in to `/vpn` and sees **only the peers they own** — each as a card with its assigned IP,
+live presence, throughput, a one-click **Download .conf**, and a **QR Code** to scan straight into the
+WireGuard mobile app. No key material is ever selected by the owner-scoped query.
 
-![Self-service VPN portal](docs/images/portal-vpn.png)
+![Self-service VPN portal](docs/images/app-user-my-peers.png)
 
-*Above: a provisioned user's portal — each owned peer renders as a card showing its assigned IP and live
-status, with one-click **Download .conf** and **QR Code** actions. (Sample peers shown for illustration.)*
+**Scan to connect** — the same client config rendered as a scannable QR (illustrative example below; real
+keys are never committed):
 
-**QR code** — the same client config, rendered as a scannable PNG (illustrative example below; real keys
-are never committed):
-
-<img src="docs/images/portal-qr-sample.png" alt="Client config QR code" width="220">
+![Scan to connect dialog](docs/images/app-qr-dialog.png)
 
 ### 3 · REST API (VPN API token)
 
@@ -316,8 +337,9 @@ vpn_management/
 ├── tasks.py            # Background reconcile / poll / materialize jobs
 ├── audit.py            # Append-only VPN Audit Log writer (key-redacted)
 ├── install.py          # after_install: seed roles/settings + health-gate on the socket
-├── www/vpn.{py,html}   # Self-service portal at /vpn
+├── www/vpn.{py,html}   # Mounts the /vpn single-page app (admin console + user portal)
 └── vpn_management/doctype/…   # The 8 DocTypes above
+frontend/               # Vue 3 + Frappe UI SPA served at /vpn (role-based: admin console · user portal)
 deploy/
 ├── install.sh                      # One-command dual-mode installer
 ├── docker-compose.wg-agent.yml     # In-app compose fragment (layered, never edits the bench file)
