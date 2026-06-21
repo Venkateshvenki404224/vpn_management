@@ -53,6 +53,13 @@
       show-owner
       show-admin-actions
       @peer-changed="refresh"
+      @row-click="openDrawer"
+    />
+
+    <PeerDetailDrawer
+      v-model:open="drawerOpen"
+      :peer="drawerPeer"
+      @changed="refresh"
     />
 
     <Dialog v-model:open="showCreate" :options="{ title: 'Create Peer' }">
@@ -107,10 +114,11 @@ import {
   LoadingIndicator,
   createResource,
 } from "frappe-ui";
-import { computed, reactive, ref } from "vue";
+import { computed, onUnmounted, reactive, ref } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
+import PeerDetailDrawer from "@/components/PeerDetailDrawer.vue";
 import PeerTable from "@/components/PeerTable.vue";
 import ServerTable from "@/components/ServerTable.vue";
 import { errorMessage } from "@/utils/format";
@@ -138,6 +146,17 @@ const serverOptions = computed(() =>
 function refresh() {
   peers.reload();
   servers.reload();
+}
+
+// Keep presence + throughput feeling live; cleared on unmount.
+const poll = setInterval(() => peers.reload(), 30000);
+onUnmounted(() => clearInterval(poll));
+
+const drawerOpen = ref(false);
+const drawerPeer = ref(null);
+function openDrawer(peer) {
+  drawerPeer.value = peer;
+  drawerOpen.value = true;
 }
 
 const showCreate = ref(false);

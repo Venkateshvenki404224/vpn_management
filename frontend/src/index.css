@@ -17,3 +17,36 @@ body {
 [data-theme="dark"] {
   color-scheme: dark;
 }
+
+/*
+ * PeerDetailDrawer — present the centered, teleported frappe-ui Dialog as a
+ * right-edge slide-over. Passing `position="right"` only tags the wrapper with
+ * `data-position="right"` (the component has no right layout of its own), so we
+ * right-anchor + full-height the panel here. Global (not scoped) because the
+ * Dialog teleports to <body>, beyond any component's scoped styles. The high-
+ * specificity selectors win over the component's own utility classes + the
+ * default scale-in animation.
+ */
+.dialog-overlay > [data-position="right"] {
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0;
+}
+.dialog-overlay > [data-position="right"] > .dialog-content {
+  margin: 0;
+  min-height: 100vh;
+  border-radius: 0;
+}
+@keyframes vpn-drawer-in {
+  from {
+    opacity: 0.6;
+    transform: translateX(2rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.dialog-overlay > [data-position="right"] > .dialog-content[data-state="open"] {
+  animation: vpn-drawer-in 150ms ease-out;
+}

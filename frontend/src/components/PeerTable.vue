@@ -25,26 +25,32 @@
           >{{ row.assigned_ip || "—" }}</span
         >
         <StatusBadge v-else-if="column.key === 'status'" :status="row.status" />
-        <span
-          v-else-if="column.key === 'last_handshake'"
-          class="truncate text-ink-gray-6"
-          >{{ relativeTime(row.last_handshake) }}</span
-        >
-        <span
+        <PresenceDot
+          v-else-if="column.key === 'presence'"
+          :last-handshake="row.last_handshake"
+        />
+        <ThroughputBadge
           v-else-if="column.key === 'transfer'"
-          class="whitespace-nowrap text-ink-gray-6"
-          >↓ {{ humanBytes(row.rx_bytes) }} · ↑ {{ humanBytes(row.tx_bytes) }}</span
+          :rx-bytes="row.rx_bytes"
+          :tx-bytes="row.tx_bytes"
+        />
+        <!-- Stop row-click propagation so the action button doesn't also open the drawer. -->
+        <div
+          v-else-if="column.key === 'actions'"
+          class="flex justify-end"
+          @click.stop
         >
-        <PeerActions
-          v-else-if="column.key === 'actions' && showActions"
-          :peer="row"
-          @show-qr="(peer) => emit('show-qr', peer)"
-        />
-        <PeerAdminActions
-          v-else-if="column.key === 'actions' && showAdminActions"
-          :peer="row"
-          @done="emit('peer-changed')"
-        />
+          <PeerActions
+            v-if="showActions"
+            :peer="row"
+            @show-qr="(peer) => emit('show-qr', peer)"
+          />
+          <PeerAdminActions
+            v-else-if="showAdminActions"
+            :peer="row"
+            @done="emit('peer-changed')"
+          />
+        </div>
       </template>
     </ListView>
   </div>
@@ -55,8 +61,9 @@ import { ListView } from "frappe-ui";
 import { computed } from "vue";
 import PeerActions from "@/components/PeerActions.vue";
 import PeerAdminActions from "@/components/PeerAdminActions.vue";
+import PresenceDot from "@/components/PresenceDot.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
-import { humanBytes, relativeTime } from "@/utils/format";
+import ThroughputBadge from "@/components/ThroughputBadge.vue";
 
 const props = defineProps({
   peers: { type: Array, default: () => [] },
@@ -64,9 +71,14 @@ const props = defineProps({
   showActions: { type: Boolean, default: false },
   showAdminActions: { type: Boolean, default: false },
 });
-const emit = defineEmits(["show-qr", "peer-changed"]);
+const emit = defineEmits(["show-qr", "peer-changed", "row-click"]);
 
-const options = { selectable: false, showTooltip: false, rowHeight: 48 };
+const options = {
+  selectable: false,
+  showTooltip: false,
+  rowHeight: 48,
+  onRowClick: (row) => emit("row-click", row),
+};
 
 const columns = computed(() => {
   const cols = [{ label: "Peer", key: "peer_name", width: 1.4 }];
@@ -76,7 +88,7 @@ const columns = computed(() => {
     { label: "Server", key: "server", width: 1 },
     { label: "Address", key: "assigned_ip", width: 1 },
     { label: "Status", key: "status", width: 0.8 },
-    { label: "Last handshake", key: "last_handshake", width: 1 },
+    { label: "Presence", key: "presence", width: 0.9 },
     { label: "Transfer", key: "transfer", width: 1.1 }
   );
   // .conf/QR buttons need room; the admin ⋮ menu is narrow.
