@@ -24,7 +24,15 @@
       </div>
     </div>
 
-    <div v-if="servers.loading && !rows.length" class="flex justify-center py-16">
+    <ErrorState
+      v-if="servers.error"
+      :message="errorMessage(servers.error)"
+      @retry="servers.reload()"
+    />
+    <div
+      v-else-if="servers.loading && !rows.length"
+      class="flex justify-center py-16"
+    >
       <LoadingIndicator class="size-6 text-ink-gray-5" />
     </div>
     <EmptyState
@@ -54,8 +62,10 @@ import { Button, LoadingIndicator, createResource } from "frappe-ui";
 import { computed, ref } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
+import ErrorState from "@/components/ErrorState.vue";
 import ServerForm from "@/components/ServerForm.vue";
 import ServerTable from "@/components/ServerTable.vue";
+import { errorMessage } from "@/utils/format";
 
 const servers = createResource({
   url: "vpn_management.api.list_servers",

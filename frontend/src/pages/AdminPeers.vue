@@ -30,7 +30,15 @@
     </template>
 
     <h2 class="mb-2 text-sm font-semibold text-ink-gray-7">Peers</h2>
-    <div v-if="peers.loading && !peerRows.length" class="flex justify-center py-16">
+    <ErrorState
+      v-if="peers.error"
+      :message="errorMessage(peers.error)"
+      @retry="refresh"
+    />
+    <div
+      v-else-if="peers.loading && !peerRows.length"
+      class="flex justify-center py-16"
+    >
       <LoadingIndicator class="size-6 text-ink-gray-5" />
     </div>
     <EmptyState
@@ -102,8 +110,10 @@ import {
 import { computed, reactive, ref } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
+import ErrorState from "@/components/ErrorState.vue";
 import PeerTable from "@/components/PeerTable.vue";
 import ServerTable from "@/components/ServerTable.vue";
+import { errorMessage } from "@/utils/format";
 
 const peers = createResource({
   url: "vpn_management.api.list_peers",

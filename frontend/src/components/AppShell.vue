@@ -17,9 +17,10 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { Sidebar } from "frappe-ui";
 import { isAdmin, logout, session } from "@/data/session";
+import { theme, toggleTheme } from "@/data/theme";
 
 // Served from the app's public/ via the /assets symlink. Kept as a runtime
 // string so Vite doesn't try to resolve it as a build-time asset.
@@ -44,12 +45,20 @@ watch(collapsed, (value) => {
 
 // Brand + account header. The session is resolved by the router guard before any
 // page (and thus this shell) mounts, so `session.user` is the real user here.
-const header = {
+// Computed so the dark-mode item's label/icon flip as `theme.dark` changes.
+const header = computed(() => ({
   title: "VPN Management",
   subtitle: session.user,
   logo: logoUrl,
-  menuItems: [{ label: "Logout", icon: "lucide-log-out", onClick: logout }],
-};
+  menuItems: [
+    {
+      label: theme.dark ? "Light mode" : "Dark mode",
+      icon: theme.dark ? "lucide-sun" : "lucide-moon",
+      onClick: toggleTheme,
+    },
+    { label: "Logout", icon: "lucide-log-out", onClick: logout },
+  ],
+}));
 
 // SidebarItem resolves active state by route name, and SidebarSection hides any
 // item whose `condition` is false — so admin links role-gate via `isAdmin`.
@@ -78,6 +87,12 @@ const sections = [
         label: "Pools",
         icon: "lucide-network",
         to: "/admin/pools",
+        condition: isAdmin,
+      },
+      {
+        label: "Audit",
+        icon: "lucide-scroll-text",
+        to: "/admin/audit",
         condition: isAdmin,
       },
       { label: "My Peers", icon: "lucide-user", to: "/my-peers" },

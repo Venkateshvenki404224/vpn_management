@@ -29,6 +29,11 @@ const routes = [
     component: () => import("@/pages/Pools.vue"),
   },
   {
+    path: "/admin/audit",
+    name: "Audit",
+    component: () => import("@/pages/AuditLog.vue"),
+  },
+  {
     path: "/my-peers",
     name: "My Peers",
     component: () => import("@/pages/MyPeers.vue"),

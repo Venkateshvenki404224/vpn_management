@@ -28,7 +28,15 @@
     <!-- Interface status -->
     <section class="mb-6">
       <h2 class="mb-2 text-sm font-semibold text-ink-gray-7">Interfaces</h2>
-      <div v-if="servers.loading && !serverRows.length" class="flex justify-center py-12">
+      <ErrorState
+        v-if="servers.error"
+        :message="errorMessage(servers.error)"
+        @retry="servers.reload()"
+      />
+      <div
+        v-else-if="servers.loading && !serverRows.length"
+        class="flex justify-center py-12"
+      >
         <LoadingIndicator class="size-6 text-ink-gray-5" />
       </div>
       <EmptyState
@@ -51,7 +59,15 @@
     <!-- Recent activity -->
     <section>
       <h2 class="mb-2 text-sm font-semibold text-ink-gray-7">Recent activity</h2>
-      <div v-if="audit.loading && !auditRows.length" class="flex justify-center py-12">
+      <ErrorState
+        v-if="audit.error"
+        :message="errorMessage(audit.error)"
+        @retry="audit.reload()"
+      />
+      <div
+        v-else-if="audit.loading && !auditRows.length"
+        class="flex justify-center py-12"
+      >
         <LoadingIndicator class="size-6 text-ink-gray-5" />
       </div>
       <EmptyState
@@ -70,9 +86,11 @@ import { Button, LoadingIndicator, createResource } from "frappe-ui";
 import { computed, onUnmounted } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
+import ErrorState from "@/components/ErrorState.vue";
 import RecentActivity from "@/components/RecentActivity.vue";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import StatCounter from "@/components/StatCounter.vue";
+import { errorMessage } from "@/utils/format";
 
 const servers = createResource({
   url: "vpn_management.api.list_servers",

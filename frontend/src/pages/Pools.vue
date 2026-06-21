@@ -24,7 +24,15 @@
       </div>
     </div>
 
-    <div v-if="pools.loading && !rows.length" class="flex justify-center py-16">
+    <ErrorState
+      v-if="pools.error"
+      :message="errorMessage(pools.error)"
+      @retry="pools.reload()"
+    />
+    <div
+      v-else-if="pools.loading && !rows.length"
+      class="flex justify-center py-16"
+    >
       <LoadingIndicator class="size-6 text-ink-gray-5" />
     </div>
     <EmptyState
@@ -86,8 +94,9 @@ import { Button, ListView, LoadingIndicator, createResource } from "frappe-ui";
 import { computed, ref } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
+import ErrorState from "@/components/ErrorState.vue";
 import PoolForm from "@/components/PoolForm.vue";
-import { relativeTime } from "@/utils/format";
+import { errorMessage, relativeTime } from "@/utils/format";
 
 const pools = createResource({
   url: "vpn_management.api.list_pools",

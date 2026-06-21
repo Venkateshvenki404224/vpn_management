@@ -4,6 +4,8 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import { router } from "./router";
 import "./index.css";
+// Side-effect import: applies the saved light/dark theme before the app mounts.
+import "@/data/theme";
 
 // Route every createResource through frappeRequest: it attaches the session
 // cookie and the CSRF token (read from window.csrf_token, injected by boot).

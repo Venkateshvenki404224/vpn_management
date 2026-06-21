@@ -25,7 +25,15 @@
       />
     </div>
 
-    <div v-if="allocations.loading && !data" class="flex justify-center py-16">
+    <ErrorState
+      v-if="allocations.error"
+      :message="errorMessage(allocations.error)"
+      @retry="allocations.reload()"
+    />
+    <div
+      v-else-if="allocations.loading && !data"
+      class="flex justify-center py-16"
+    >
       <LoadingIndicator class="size-6 text-ink-gray-5" />
     </div>
     <EmptyState
@@ -48,7 +56,9 @@ import { Button, LoadingIndicator, createResource } from "frappe-ui";
 import { computed } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
+import ErrorState from "@/components/ErrorState.vue";
 import IpAllocationGrid from "@/components/IpAllocationGrid.vue";
+import { errorMessage } from "@/utils/format";
 
 const props = defineProps({
   // Supplied by the router from /admin/servers/:server/ip-map.

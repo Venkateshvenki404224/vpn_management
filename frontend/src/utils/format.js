@@ -30,3 +30,21 @@ export function relativeTime(value) {
 	}
 	return "just now";
 }
+
+// Absolute local timestamp — used as the tooltip alongside the relative label.
+export function absoluteTime(value) {
+	if (!value) return "";
+	const date = new Date(String(value).replace(" ", "T"));
+	if (Number.isNaN(date.getTime())) return String(value);
+	return date.toLocaleString();
+}
+
+// Normalize a createResource / frappeRequest error into one readable line for
+// the shared ErrorState. Frappe surfaces server errors as a `messages` array.
+export function errorMessage(error) {
+	if (!error) return "";
+	if (typeof error === "string") return error;
+	const messages = error.messages || error._server_messages;
+	if (Array.isArray(messages) && messages.length) return messages.join(", ");
+	return error.message || "Something went wrong.";
+}
