@@ -37,6 +37,10 @@ FIREWALL_TEMPLATES = (
 
 def seed_rules(server):
 	"""Append the default firewall rules to a server that has none yet."""
+	# An upsert that supplied an explicit rule set (even an empty one) sets this flag
+	# so the defaults don't clobber the caller's intent on create.
+	if server.flags.get("skip_firewall_seed"):
+		return
 	if server.get("firewall_rules"):
 		return
 	for rule_type, ip_table, chain, spec, teardown in FIREWALL_TEMPLATES:

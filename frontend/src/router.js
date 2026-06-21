@@ -13,11 +13,27 @@ const routes = [
     component: () => import("@/pages/AdminPeers.vue"),
   },
   {
+    path: "/admin/servers",
+    name: "Servers",
+    component: () => import("@/pages/Servers.vue"),
+  },
+  {
+    path: "/admin/servers/:server/ip-map",
+    name: "IP Allocation",
+    component: () => import("@/pages/IpMap.vue"),
+    props: true,
+  },
+  {
+    path: "/admin/pools",
+    name: "Pools",
+    component: () => import("@/pages/Pools.vue"),
+  },
+  {
     path: "/my-peers",
     name: "My Peers",
     component: () => import("@/pages/MyPeers.vue"),
   },
-  // "/" and anything unrecognised fall through to the guard, which — once the
+  // "/" and anything unrecognised match this catch-all; the guard — once the
   // session has loaded — sends each role to its own home. A static redirect here
   // would resolve *before* the guard and defeat the role-based landing.
   {
@@ -29,7 +45,6 @@ const routes = [
 
 const ADMIN_HOME = "/admin";
 const USER_HOME = "/my-peers";
-const KNOWN_PATHS = new Set([ADMIN_HOME, "/admin/peers", USER_HOME]);
 
 export const router = createRouter({
   history: createWebHistory("/vpn/"),
@@ -48,8 +63,8 @@ router.beforeEach(async (to) => {
   // Keep non-admins out of the admin console (its API calls would 403 anyway),
   if (to.path.startsWith("/admin") && !isAdmin.value) return USER_HOME;
 
-  // and land "/" / unknown paths on the role's home.
-  if (!KNOWN_PATHS.has(to.path)) return isAdmin.value ? ADMIN_HOME : USER_HOME;
+  // and land "/" / unknown paths (only the catch-all matched) on the role's home.
+  if (to.name === "Landing") return isAdmin.value ? ADMIN_HOME : USER_HOME;
 
   return true;
 });

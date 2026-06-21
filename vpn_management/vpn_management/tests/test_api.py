@@ -9,7 +9,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils.password import get_decrypted_password
 
-from vpn_management import api, crypto
+from vpn_management import allocation, api, crypto
 from vpn_management.vpn_management.tests import fixtures
 
 
@@ -182,7 +182,7 @@ class TestSelfServiceConfig(IntegrationTestCase):
 
 	def test_unconfigured_endpoint_surfaces_a_clear_message(self):
 		peer = self._make_alice_peer("cfg6")
-		with patch("vpn_management.api._endpoint_host", return_value=""):
+		with patch("vpn_management.api.client_config._endpoint_host", return_value=""):
 			with self.assertRaises(frappe.ValidationError):
 				api.my_config_download(peer["name"])
 
@@ -196,7 +196,7 @@ class TestSelfServiceConfig(IntegrationTestCase):
 			captured["text"] = text
 			return render(text)
 
-		with patch("vpn_management.api._qr_png", side_effect=spy):
+		with patch("vpn_management.api.client_config._qr_png", side_effect=spy):
 			api.my_config_qr(peer["name"])
 		self.assertIn("[Interface]", captured["text"])
 		self.assertIn("Endpoint = vpn.example.com:", captured["text"])
@@ -212,3 +212,114 @@ class TestSelfServiceConfig(IntegrationTestCase):
 	def test_address_prefix_matches_family(self):
 		self.assertEqual(api._max_prefix("10.66.0.2"), 32)
 		self.assertEqual(api._max_prefix("fd00::2"), 128)
+
+
+class TestInfraApi(IntegrationTestCase):
+	"""Server / pool CRUD wrappers: admin-gated, key-safe, allocation-preserving."""
+
+	def setUp(self):
+		self.server = fixtures.ensure_server("wg8")
+		fixtures.ensure_user("machine@vpn.test", ["VPN API"])
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def test_upsert_server_creates_and_hides_private_key(self):
+		frappe.db.delete("WireGuard Server", {"interface_name": "wg6"})
+		with patch("frappe.enqueue"):
+			result = api.upsert_server(interface_name="wg6", listen_port=44999, environment="dev")
+		self.assertEqual(result["interface_name"], "wg6")
+		self.assertEqual(result["listen_port"], 44999)
+		# keygen ran on insert, but only the public half is ever returned.
+		self.assertTrue(result["server_public_key"])
+		self.assertNotIn("server_private_key", result)
+
+	def test_upsert_server_edits_existing(self):
+		with patch("frappe.enqueue"):
+			api.upsert_server(interface_name="wg8", listen_port=45123, egress_interface="eth9")
+		server = frappe.get_doc("WireGuard Server", "wg8")
+		self.assertEqual(server.listen_port, 45123)
+		self.assertEqual(server.egress_interface, "eth9")
+
+	def test_get_server_returns_firewall_rules_without_key(self):
+		view = api.get_server("wg8")
+		self.assertNotIn("server_private_key", view)
+		# Rules are seeded on creation; each row is the exact safe allowlist.
+		self.assertTrue(view["firewall_rules"])
+		for row in view["firewall_rules"]:
+			self.assertEqual(set(row.keys()), set(api.SAFE_FIREWALL_FIELDS))
+
+	def test_upsert_server_replaces_firewall_rules(self):
+		rules = [
+			{
+				"rule_type": "MASQUERADE",
+				"ip_table": "nat",
+				"chain": "POSTROUTING",
+				"spec": "-o {egress} -j MASQUERADE",
+				"enabled": 1,
+			}
+		]
+		with patch("frappe.enqueue"):
+			view = api.upsert_server(interface_name="wg8", firewall_rules=rules)
+		self.assertEqual(len(view["firewall_rules"]), 1)
+		self.assertEqual(view["firewall_rules"][0]["rule_type"], "MASQUERADE")
+
+	def test_create_with_explicit_empty_rules_stays_rules_less(self):
+		# An explicit [] must mean "no rules", not silently re-seeded defaults on create.
+		frappe.db.delete("WireGuard Server", {"interface_name": "wg6"})
+		with patch("frappe.enqueue"):
+			view = api.upsert_server(interface_name="wg6", firewall_rules=[])
+		self.assertEqual(view["firewall_rules"], [])
+
+	def test_non_admin_cannot_upsert_server(self):
+		frappe.set_user("machine@vpn.test")  # VPN API is read-only on WireGuard Server
+		with patch("frappe.enqueue"), self.assertRaises(frappe.PermissionError):
+			api.upsert_server(interface_name="wg8", listen_port=40000)
+
+	def test_non_admin_cannot_upsert_pool(self):
+		fixtures.seed_pool("wg8", cidr="10.66.0.0/29", gateway="10.66.0.1")
+		frappe.set_user("machine@vpn.test")  # VPN API has no Network Pool permission at all
+		with patch("frappe.enqueue"), self.assertRaises(frappe.PermissionError):
+			api.upsert_pool(pool_name="pool-wg8", server="wg8", cidr="10.66.0.0/29")
+
+	def test_upsert_pool_creates_and_lists(self):
+		frappe.db.delete("Network Pool", {"server": "wg8"})
+		with patch("frappe.enqueue"):
+			view = api.upsert_pool(
+				pool_name="pool-wg8", server="wg8", cidr="10.66.0.0/29", gateway_ip="10.66.0.1"
+			)
+		self.assertEqual(view["cidr"], "10.66.0.0/29")
+		self.assertEqual(view["reserved_ranges"], [])
+		self.assertIn("pool-wg8", {pool["name"] for pool in api.list_pools(server="wg8")})
+
+	def test_upsert_pool_preserves_allocations_across_edits(self):
+		fixtures.seed_pool("wg8", cidr="10.66.0.0/29", gateway="10.66.0.1")
+		fixtures.make_peer("wg8")  # claims the lowest free address
+		before = frappe.db.count("IP Allocation", {"server": "wg8"})
+		allocated = frappe.db.get_value("IP Allocation", {"server": "wg8", "allocated": 1}, "name")
+		# Edit the pool (add a reserved range), then re-materialize as the controller would.
+		with patch("frappe.enqueue"):
+			api.upsert_pool(
+				pool_name="pool-wg8",
+				server="wg8",
+				cidr="10.66.0.0/29",
+				gateway_ip="10.66.0.1",
+				reserved_ranges=[{"start_ip": "10.66.0.6", "end_ip": "10.66.0.6", "reason": "printer"}],
+			)
+		allocation.materialize("pool-wg8")
+		self.assertEqual(before, frappe.db.count("IP Allocation", {"server": "wg8"}))  # never deleted
+		self.assertTrue(frappe.db.get_value("IP Allocation", allocated, "allocated"))  # claim survives
+
+	def test_list_ip_allocations_summary_and_key_safety(self):
+		fixtures.seed_pool("wg8", cidr="10.66.0.0/29", gateway="10.66.0.1")
+		fixtures.make_peer("wg8")
+		result = api.list_ip_allocations("wg8")
+		summary = result["summary"]
+		self.assertEqual(summary["allocated"], 1)
+		self.assertGreaterEqual(summary["reserved"], 1)  # at least the gateway
+		self.assertEqual(summary["total"], summary["allocated"] + summary["reserved"] + summary["free"])
+		self.assertTrue(result["rows"])
+		for row in result["rows"]:
+			# The IP-map projection is a fixed 5-field allowlist — assert it exactly so a
+			# widened SELECT (or a doc-level fetch) that could leak fields fails here.
+			self.assertEqual(set(row.keys()), {"name", "ip_address", "allocated", "reserved", "peer"})

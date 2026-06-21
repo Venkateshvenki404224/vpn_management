@@ -68,6 +68,18 @@ const sections = [
         to: "/admin/peers",
         condition: isAdmin,
       },
+      {
+        label: "Servers",
+        icon: "lucide-server-cog",
+        to: "/admin/servers",
+        condition: isAdmin,
+      },
+      {
+        label: "Pools",
+        icon: "lucide-network",
+        to: "/admin/pools",
+        condition: isAdmin,
+      },
       { label: "My Peers", icon: "lucide-user", to: "/my-peers" },
     ],
   },

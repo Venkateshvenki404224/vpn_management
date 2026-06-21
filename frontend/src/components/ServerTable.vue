@@ -26,18 +26,33 @@
           class="truncate text-ink-gray-6"
           >{{ relativeTime(row.last_reconcile) }}</span
         >
-        <ServerAdminActions
+        <div
           v-else-if="column.key === 'actions'"
-          :server="row"
-          @done="emit('done')"
-        />
+          class="flex items-center justify-end gap-1"
+        >
+          <template v-if="manage">
+            <Button
+              variant="ghost"
+              icon="lucide-pencil"
+              aria-label="Edit server"
+              @click.stop="emit('edit', row)"
+            />
+            <Button
+              variant="ghost"
+              icon="lucide-network"
+              aria-label="IP allocation map"
+              :route="`/admin/servers/${row.name}/ip-map`"
+            />
+          </template>
+          <ServerAdminActions :server="row" @done="emit('done')" />
+        </div>
       </template>
     </ListView>
   </div>
 </template>
 
 <script setup>
-import { ListView } from "frappe-ui";
+import { Button, ListView } from "frappe-ui";
 import { computed } from "vue";
 import ServerAdminActions from "@/components/ServerAdminActions.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
@@ -47,8 +62,10 @@ const props = defineProps({
   servers: { type: Array, default: () => [] },
   // Show the Reconcile/Provision lifecycle actions (admin-only screens).
   actions: { type: Boolean, default: false },
+  // Management screen: also show Edit + IP-map actions.
+  manage: { type: Boolean, default: false },
 });
-const emit = defineEmits(["done"]);
+const emit = defineEmits(["done", "edit"]);
 
 const options = { selectable: false, showTooltip: false, rowHeight: 48 };
 
@@ -61,8 +78,8 @@ const columns = computed(() => {
     { label: "Live", key: "interface_up", width: 0.7 },
     { label: "Last reconcile", key: "last_reconcile", width: 1.1 },
   ];
-  if (props.actions)
-    cols.push({ label: "", key: "actions", width: "3rem", align: "right" });
+  if (props.actions || props.manage)
+    cols.push({ label: "", key: "actions", width: props.manage ? "8rem" : "3rem", align: "right" });
   return cols;
 });
 </script>
