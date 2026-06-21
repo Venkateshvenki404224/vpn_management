@@ -218,7 +218,7 @@ def _deny(message):
 	# discard the denial audit row; commit it first so denied attempts stay on record.
 	# Skipped outside a request (tests/console/jobs commit at their own boundary).
 	if getattr(frappe.local, "request", None):
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep -- deliberate: persist the denial audit past the request rollback
 	frappe.throw(_(message), frappe.PermissionError)
 
 

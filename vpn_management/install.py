@@ -46,7 +46,7 @@ def _health_gate_agent_socket():
 			_(
 				"wg-agent is unreachable ({0}). Bring the sidecar up first — run "
 				"deploy/install.sh from the bench root instead of a bare install-app."
-			).format(error)
+			).format(str(error))
 		)
 
 
