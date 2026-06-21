@@ -253,7 +253,12 @@ def _allocation_summary(server):
 	total = frappe.db.count("IP Allocation", {"server": server})
 	allocated = frappe.db.count("IP Allocation", {"server": server, "allocated": 1})
 	reserved = frappe.db.count("IP Allocation", {"server": server, "reserved": 1})
-	return {"total": total, "allocated": allocated, "reserved": reserved, "free": max(total - allocated - reserved, 0)}
+	return {
+		"total": total,
+		"allocated": allocated,
+		"reserved": reserved,
+		"free": max(total - allocated - reserved, 0),
+	}
 
 
 def materialize_pools(server):

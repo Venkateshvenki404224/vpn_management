@@ -37,9 +37,13 @@ repos:
     hooks:
       - id: prettier
         types_or: [javascript, vue, scss]
-        # Ignore any files that might contain jinja / bundles
+        # Ignore jinja / bundles, and the standalone Vite SPA under frontend/ — it is a
+        # self-contained app with its own toolchain/style (like apps/helpdesk/desk) and is
+        # already excluded from eslint below; the pinned prettier 2.7.1 here does not match
+        # its formatting, so gating it on this hook only produces false failures.
         exclude: |
             (?x)^(
+                frontend/.*|
                 vpn_management/public/dist/.*|
                 .*node_modules.*|
                 .*boilerplate.*|
