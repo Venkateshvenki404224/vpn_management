@@ -1,0 +1,19 @@
+@import "frappe-ui/style.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  color: var(--ink-gray-9);
+  background-color: var(--surface-gray-1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}

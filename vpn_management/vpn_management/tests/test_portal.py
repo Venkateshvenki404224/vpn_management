@@ -1,84 +1,48 @@
 # Copyright (c) 2026, Venkatesh and contributors
 # For license information, please see license.txt
 
-"""Self-service portal: owner-scoped listing, guest rejection, empty state."""
+"""SPA shell boot: guest redirect, session/CSRF payload, endpoint-ready flag.
+
+The page no longer renders peers (the Vue app fetches those over the owner-scoped
+API); these tests pin the thin server contract the SPA boots from.
+"""
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from vpn_management import crypto, permissions
 from vpn_management.vpn_management.tests import fixtures
-from vpn_management.www import vpn as portal
+from vpn_management.www.vpn import index as portal
 
 
-class TestVpnPortal(IntegrationTestCase):
+class TestVpnSpaBoot(IntegrationTestCase):
 	def setUp(self):
-		self.server = fixtures.ensure_server("wg8")
-		fixtures.seed_pool("wg8", cidr="10.66.0.0/29", gateway="10.66.0.1")
 		fixtures.ensure_user("alice@vpn.test", ["VPN User"])
-		fixtures.ensure_user("bob@vpn.test", ["VPN User"])
-		self.alice_peer = fixtures.make_peer(
-			"wg8", peer_name="alice-peer", owner_user="alice@vpn.test", public_key=_pubkey()
-		)
-		self.bob_peer = fixtures.make_peer(
-			"wg8", peer_name="bob-peer", owner_user="bob@vpn.test", public_key=_pubkey()
-		)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		frappe.local.flags.redirect_location = None
 
-	def test_guest_is_rejected(self):
+	def test_guest_is_redirected_to_login(self):
 		frappe.set_user("Guest")
-		with self.assertRaises(frappe.PermissionError):
+		with self.assertRaises(frappe.Redirect):
 			portal.get_context(frappe._dict())
+		location = frappe.local.flags.redirect_location
+		self.assertIn("/login", location)
+		self.assertIn("redirect-to", location)
 
-	def test_lists_only_own_peers(self):
+	def test_boot_carries_session_and_csrf(self):
 		frappe.set_user("alice@vpn.test")
-		context = portal.get_context(frappe._dict())
-		names = {peer["name"] for peer in context.peers}
-		self.assertIn(self.alice_peer.name, names)
-		self.assertNotIn(self.bob_peer.name, names)
+		boot = portal.get_context(frappe._dict()).boot
+		self.assertEqual(boot["session_user"], "alice@vpn.test")
+		self.assertIsInstance(boot["csrf_token"], str)
+		self.assertTrue(boot["csrf_token"])
 
-	def test_peer_rows_carry_links_and_no_key_material(self):
+	def test_boot_endpoint_ready_is_a_bool(self):
 		frappe.set_user("alice@vpn.test")
-		context = portal.get_context(frappe._dict())
-		row = context.peers[0]
-		self.assertIn("my_config_download", row["conf_url"])
-		self.assertIn("my_config_qr", row["qr_url"])
-		# Exact safe allowlist: any extra field (e.g. a key) leaking into the row fails here.
-		self.assertEqual(
-			set(row.keys()),
-			{"name", "peer_name", "server", "assigned_ip", "status", "last_handshake", "conf_url", "qr_url"},
-		)
+		boot = portal.get_context(frappe._dict()).boot
+		self.assertIn("endpoint_ready", boot)
+		self.assertIsInstance(boot["endpoint_ready"], bool)
 
-	def test_disabled_peer_is_excluded(self):
-		off = fixtures.make_peer(
-			"wg8", peer_name="alice-off", owner_user="alice@vpn.test", enabled=0, public_key=_pubkey()
-		)
-		frappe.set_user("alice@vpn.test")
-		names = {peer["name"] for peer in portal.get_context(frappe._dict()).peers}
-		self.assertIn(self.alice_peer.name, names)
-		self.assertNotIn(off.name, names)
-
-	def test_website_permission_enforces_ownership(self):
-		# Layer 4: has_website_permission gates the website doc path on owner_user.
-		self.assertTrue(permissions.has_website_permission(self.alice_peer, user="alice@vpn.test"))
-		self.assertFalse(permissions.has_website_permission(self.bob_peer, user="alice@vpn.test"))
-		self.assertTrue(permissions.has_website_permission(self.bob_peer, user="Administrator"))
-
-	def test_permission_engine_denies_cross_user_read(self):
-		# Layers 2+3: the role engine (if_owner + permission_query_conditions + has_permission)
-		# denies a VPN User any peer that is not their own.
-		self.assertFalse(
-			frappe.has_permission("VPN Peer", "read", doc=self.bob_peer.name, user="alice@vpn.test")
-		)
-
-	def test_peerless_user_sees_empty_state(self):
-		fixtures.ensure_user("nobody@vpn.test", ["VPN User"])
-		frappe.set_user("nobody@vpn.test")
-		context = portal.get_context(frappe._dict())
-		self.assertEqual(context.peers, [])
-
-
-def _pubkey():
-	return crypto.generate_keypair()[1]
+	def test_endpoint_ready_true_when_host_configured(self):
+		frappe.db.set_single_value("VPN Settings", "vpn_endpoint_host", "vpn.example.com")
+		self.assertTrue(portal._endpoint_ready())
