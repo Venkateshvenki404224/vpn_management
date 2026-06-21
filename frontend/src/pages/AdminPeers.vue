@@ -22,18 +22,12 @@
       </div>
     </div>
 
-    <div
-      v-if="serverRows.length"
-      class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-    >
-      <ServerStatusCard
-        v-for="server in serverRows"
-        :key="server.name"
-        :server="server"
-        actions
-        @done="refresh"
-      />
-    </div>
+    <template v-if="serverRows.length">
+      <h2 class="mb-2 text-sm font-semibold text-ink-gray-7">Servers</h2>
+      <div class="mb-6">
+        <ServerTable :servers="serverRows" actions @done="refresh" />
+      </div>
+    </template>
 
     <h2 class="mb-2 text-sm font-semibold text-ink-gray-7">Peers</h2>
     <div v-if="peers.loading && !peerRows.length" class="flex justify-center py-16">
@@ -109,7 +103,7 @@ import { computed, reactive, ref } from "vue";
 import AppShell from "@/components/AppShell.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import PeerTable from "@/components/PeerTable.vue";
-import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import ServerTable from "@/components/ServerTable.vue";
 
 const peers = createResource({
   url: "vpn_management.api.list_peers",

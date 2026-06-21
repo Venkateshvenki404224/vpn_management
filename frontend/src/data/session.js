@@ -38,3 +38,16 @@ export async function loadSession() {
 export const isAdmin = computed(() => session.roles.some((role) => ADMIN_ROLES.includes(role)));
 
 export const isGuest = computed(() => !session.user || session.user === "Guest");
+
+// Frappe's whitelisted `logout` (POST) clears the session cookie; a full reload to
+// /login then re-runs the portal boot as Guest. createResource defaults to POST.
+const logoutResource = createResource({
+	url: "logout",
+	onSuccess: () => {
+		window.location.href = "/login";
+	},
+});
+
+export function logout() {
+	logoutResource.submit();
+}
