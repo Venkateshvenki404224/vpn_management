@@ -15,14 +15,37 @@
       />
     </div>
 
-    <!-- Peer counts -->
+    <!-- Peer counts + status breakdown (single dashboard_summary aggregation) -->
     <section class="mb-6">
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCounter label="Total peers" :value="counts.total" />
-        <StatCounter label="Active" :value="counts.active" tone="green" />
-        <StatCounter label="Stale" :value="counts.stale" tone="amber" />
-        <StatCounter label="Revoked" :value="counts.revoked" tone="red" />
-      </div>
+      <ErrorState
+        v-if="summary.error"
+        :message="errorMessage(summary.error)"
+        @retry="summary.reload()"
+      />
+      <template v-else>
+        <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div
+            v-for="tile in statTiles"
+            :key="tile.title"
+            class="overflow-hidden rounded-lg border border-outline-gray-2"
+          >
+            <NumberChart :config="tile" />
+          </div>
+        </div>
+        <div class="lg:max-w-lg">
+          <ChartCard
+            title="Peer status"
+            subtitle="Distribution across lifecycle states"
+            empty-icon="lucide-chart-pie"
+            empty-title="No peers yet"
+            empty-description="Status breakdown appears once peers are provisioned."
+            :loading="summary.loading && !summary.data"
+            :empty="!totalPeers"
+          >
+            <DonutChart :config="donutConfig" />
+          </ChartCard>
+        </div>
+      </template>
     </section>
 
     <!-- Interface status -->
@@ -82,14 +105,20 @@
 </template>
 
 <script setup>
-import { Button, LoadingIndicator, createResource } from "frappe-ui";
+import {
+  Button,
+  DonutChart,
+  LoadingIndicator,
+  NumberChart,
+  createResource,
+} from "frappe-ui";
 import { computed, onUnmounted } from "vue";
 import AppShell from "@/components/AppShell.vue";
+import ChartCard from "@/components/ChartCard.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import ErrorState from "@/components/ErrorState.vue";
 import RecentActivity from "@/components/RecentActivity.vue";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
-import StatCounter from "@/components/StatCounter.vue";
 import { errorMessage } from "@/utils/format";
 
 const servers = createResource({
@@ -97,11 +126,11 @@ const servers = createResource({
   method: "GET", // whitelisted GET-only; createResource defaults to POST
   auto: true,
 });
-// A generous limit so counts are accurate without a dedicated aggregate endpoint.
-const peers = createResource({
-  url: "vpn_management.api.list_peers",
+// One server-side aggregation replaces the old fetch-500-peers-and-count-in-JS
+// loop: counts by status + a 30-day trend, computed in a single grouped query.
+const summary = createResource({
+  url: "vpn_management.api.dashboard_summary",
   method: "GET",
-  params: { limit: 500 },
   auto: true,
 });
 // VPN Admin has read perm on VPN Audit Log, so the core list endpoint suffices —
@@ -118,24 +147,37 @@ const audit = createResource({
 });
 
 const serverRows = computed(() => servers.data || []);
-const peerRows = computed(() => peers.data || []);
 const auditRows = computed(() => audit.data || []);
-const loading = computed(() => servers.loading || peers.loading || audit.loading);
+const counts = computed(() => summary.data?.counts || {});
+const totalPeers = computed(() => counts.value.total || 0);
+const loading = computed(
+  () => servers.loading || summary.loading || audit.loading,
+);
 
-const counts = computed(() => {
-  const rows = peerRows.value;
-  const countBy = (status) => rows.filter((peer) => peer.status === status).length;
-  return {
-    total: rows.length,
-    active: countBy("Active"),
-    stale: countBy("Stale"),
-    revoked: countBy("Revoked"),
-  };
-});
+// NumberChart config objects (title + numeric value) for the headline row.
+const statTiles = computed(() => [
+  { title: "Total peers", value: counts.value.total || 0 },
+  { title: "Active", value: counts.value.active || 0 },
+  { title: "Stale", value: counts.value.stale || 0 },
+  { title: "Revoked", value: counts.value.revoked || 0 },
+]);
+
+// Donut rows: one slice per non-empty lifecycle state (zero-count states are
+// dropped so the chart isn't cluttered with empty slices).
+const STATUS_ORDER = ["Active", "Stale", "Pending", "Disabled", "Revoked"];
+const donutConfig = computed(() => ({
+  title: "",
+  data: STATUS_ORDER.map((status) => ({
+    status,
+    count: counts.value[status.toLowerCase()] || 0,
+  })).filter((row) => row.count > 0),
+  categoryColumn: "status",
+  valueColumn: "count",
+}));
 
 function refresh() {
   servers.reload();
-  peers.reload();
+  summary.reload();
   audit.reload();
 }
 

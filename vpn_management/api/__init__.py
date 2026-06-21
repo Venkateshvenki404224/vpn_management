@@ -46,6 +46,7 @@ from vpn_management.api.peers import (
 	regenerate_keys,
 	revoke_peer,
 )
+from vpn_management.dashboard import dashboard_summary
 
 # Private render helpers the test-suite reaches through the facade (reads/calls).
 # Patches that must take effect target the owning submodule (api.client_config.*).
@@ -65,6 +66,7 @@ __all__ = [
 	"SAFE_SERVER_FIELDS",
 	"SERVER_FORM_FIELDS",
 	"create_peer",
+	"dashboard_summary",
 	"delete_peer",
 	"get_peer",
 	"get_peer_status",
