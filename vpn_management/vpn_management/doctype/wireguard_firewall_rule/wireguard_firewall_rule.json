@@ -1,0 +1,72 @@
+{
+ "actions": [],
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "rule_type",
+  "ip_table",
+  "chain",
+  "spec",
+  "teardown_on_down",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "rule_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Rule Type",
+   "options": "FORWARD_IN\nFORWARD_OUT\nMASQUERADE\nREDIRECT",
+   "reqd": 1
+  },
+  {
+   "default": "filter",
+   "fieldname": "ip_table",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "IP Table",
+   "options": "filter\nnat",
+   "reqd": 1
+  },
+  {
+   "description": "iptables chain, e.g. FORWARD, POSTROUTING, PREROUTING.",
+   "fieldname": "chain",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Chain",
+   "reqd": 1
+  },
+  {
+   "description": "Rendered iptables match+target args (everything after the chain). Supports {iface}, {egress}, {address}, {ports}, {redirect_port} placeholders.",
+   "fieldname": "spec",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Spec",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Render a matching PostDown rule that deletes this on interface down.",
+   "fieldname": "teardown_on_down",
+   "fieldtype": "Check",
+   "label": "Teardown On Down"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "WireGuard Firewall Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

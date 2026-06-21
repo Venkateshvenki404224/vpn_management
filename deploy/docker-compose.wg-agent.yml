@@ -1,0 +1,40 @@
+# In-app compose fragment — layered onto the bench docker-compose.yml via `-f`;
+# the bench file is never edited. From the bench root:
+#
+#   docker compose -f docker-compose.yml \
+#     -f apps/vpn_management/deploy/docker-compose.wg-agent.yml up -d --build
+#
+# Service `volumes:` lists MERGE across -f files (deduped by container path), so
+# the backend/queue-long blocks only ADD mounts — they never restate command/image.
+#
+# Build context is written relative to the BENCH ROOT (what `-f` resolves against),
+# not to this fragment's own directory.
+services:
+  wg-agent:
+    build:
+      context: ./apps/vpn_management/deploy/wg-agent
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+    volumes:
+      - vpnstorage:/etc/wireguard
+      - wg-agent-sock:/run/wg-agent
+
+  # after_install runs in `backend` and health-gates on the socket, so backend
+  # needs the socket (read-only is enough — it only issues `show`).
+  backend:
+    volumes:
+      - wg-agent-sock:/run/wg-agent
+
+  # queue-long renders the conf into the shared wireguard volume and calls the
+  # agent, so it needs both the render volume and the socket.
+  queue-long:
+    volumes:
+      - vpnstorage:/etc/wireguard
+      - wg-agent-sock:/run/wg-agent
+
+volumes:
+  vpnstorage:
+  wg-agent-sock:

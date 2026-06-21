@@ -86,7 +86,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "vpn_management.install.before_install"
-# after_install = "vpn_management.install.after_install"
+after_install = "vpn_management.install.after_install"
 
 # Uninstallation
 # ------------
@@ -124,15 +124,40 @@ app_license = "mit"
 
 # Permissions
 # -----------
-# Permissions evaluated in scripted ways
+# Permissions evaluated in scripted ways: non-admins see only the VPN Peers they own.
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+	"VPN Peer": "vpn_management.permissions.get_permission_query_conditions",
+}
+
+has_permission = {
+	"VPN Peer": "vpn_management.permissions.has_permission",
+}
+
+# The website (portal) layer for VPN Peer: a portal user reaches only their own.
+has_website_permission = {
+	"VPN Peer": "vpn_management.permissions.has_website_permission",
+}
+
+# Self-service portal
+# -------------------
+# /vpn serves www/vpn.html; the entry shows in the portal sidebar for VPN Users.
+
+website_route_rules = [
+	{"from_route": "/vpn", "to_route": "vpn"},
+]
+
+standard_portal_menu_items = [
+	{"title": "My VPN", "route": "/vpn", "reference_doctype": "VPN Peer", "role": "VPN User"},
+]
+
+# Fixtures
+# --------
+# Ship the four VPN roles (with their desk_access flags) so migrate keeps them in sync.
+
+fixtures = [
+	{"dt": "Role", "filters": [["role_name", "in", ["VPN Admin", "VPN User", "VPN API", "VPN Sync"]]]},
+]
 
 # Document Events
 # ---------------
@@ -149,23 +174,14 @@ app_license = "mit"
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"vpn_management.tasks.all"
-# 	],
-# 	"daily": [
-# 		"vpn_management.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"vpn_management.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"vpn_management.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"vpn_management.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"cron": {
+		# Read live handshake/rx/tx back onto peers every 5 minutes.
+		"*/5 * * * *": ["vpn_management.tasks.poll_status"],
+		# Drift-correct the fleet and re-converge from the DB every 10 minutes.
+		"*/10 * * * *": ["vpn_management.tasks.reconcile_all"],
+	},
+}
 
 # Testing
 # -------
@@ -247,12 +263,14 @@ app_license = "mit"
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
 
-# default_log_clearing_doctypes = {
-# 	"Logging DocType Name": 30  # days to retain logs
-# }
+# The poll/reconcile crons append to VPN Audit Log continuously; retain 90 days.
+# Frappe's daily log clean-up prunes rows past this via the controller's
+# clear_old_logs LogType hook (VPNAuditLog.clear_old_logs).
+default_log_clearing_doctypes = {
+	"VPN Audit Log": 90,
+}
 
 # Translation
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

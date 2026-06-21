@@ -1,0 +1,159 @@
+{
+ "actions": [],
+ "creation": "2026-06-20 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "environment",
+  "egress_interface",
+  "default_listen_port",
+  "allow_server_keygen",
+  "wg_dir",
+  "vpn_endpoint_host",
+  "firewall_section",
+  "multiport_redirect_ports",
+  "redirect_target_port",
+  "dns_servers",
+  "default_keepalive",
+  "status_poll_interval_min",
+  "sync_section",
+  "sync_enabled",
+  "sync_requires_local",
+  "sync_token"
+ ],
+ "fields": [
+  {
+   "default": "dev",
+   "fieldname": "environment",
+   "fieldtype": "Select",
+   "label": "Environment",
+   "options": "dev\nprod",
+   "reqd": 1
+  },
+  {
+   "default": "eth0",
+   "fieldname": "egress_interface",
+   "fieldtype": "Data",
+   "label": "Egress Interface"
+  },
+  {
+   "default": "44556",
+   "fieldname": "default_listen_port",
+   "fieldtype": "Int",
+   "label": "Default Listen Port"
+  },
+  {
+   "default": "1",
+   "description": "Generate a peer keypair in-app when the peer is created without a public key.",
+   "fieldname": "allow_server_keygen",
+   "fieldtype": "Check",
+   "label": "Allow Server Key Generation"
+  },
+  {
+   "default": "/etc/wireguard",
+   "description": "Shared render directory; must match the wg-agent mount.",
+   "fieldname": "wg_dir",
+   "fieldtype": "Data",
+   "label": "WireGuard Config Directory"
+  },
+  {
+   "fieldname": "vpn_endpoint_host",
+   "fieldtype": "Data",
+   "label": "VPN Endpoint Host"
+  },
+  {
+   "fieldname": "firewall_section",
+   "fieldtype": "Section Break",
+   "label": "Firewall & Status"
+  },
+  {
+   "default": "333,666,999,3333,4444",
+   "description": "Comma-separated UDP ports redirected to the WireGuard listen port.",
+   "fieldname": "multiport_redirect_ports",
+   "fieldtype": "Small Text",
+   "label": "Multiport Redirect Ports"
+  },
+  {
+   "default": "44556",
+   "description": "Port the multiport redirect targets (the WireGuard listen port).",
+   "fieldname": "redirect_target_port",
+   "fieldtype": "Int",
+   "label": "Redirect Target Port"
+  },
+  {
+   "description": "DNS servers offered to clients in their rendered config.",
+   "fieldname": "dns_servers",
+   "fieldtype": "Data",
+   "label": "DNS Servers"
+  },
+  {
+   "default": "25",
+   "description": "Default PersistentKeepalive (seconds) for new peers.",
+   "fieldname": "default_keepalive",
+   "fieldtype": "Int",
+   "label": "Default Keepalive"
+  },
+  {
+   "default": "5",
+   "description": "A peer with no handshake within this many minutes is marked Stale.",
+   "fieldname": "status_poll_interval_min",
+   "fieldtype": "Int",
+   "label": "Status Poll Interval (min)"
+  },
+  {
+   "fieldname": "sync_section",
+   "fieldtype": "Section Break",
+   "label": "Sync & Security"
+  },
+  {
+   "default": "0",
+   "description": "Master kill-switch. While off, sync_network no-ops with an audited skipped result.",
+   "fieldname": "sync_enabled",
+   "fieldtype": "Check",
+   "label": "Sync Enabled"
+  },
+  {
+   "default": "1",
+   "description": "Require sync_network to originate from loopback (frappe.local.request_ip).",
+   "fieldname": "sync_requires_local",
+   "fieldtype": "Check",
+   "label": "Sync Requires Local"
+  },
+  {
+   "description": "Informational only. The real token lives in site_config (bench set-config vpn_sync_token); this field never stores the secret.",
+   "fieldname": "sync_token",
+   "fieldtype": "Data",
+   "label": "Sync Token (display mirror)",
+   "read_only": 1
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-20 00:00:00",
+ "module": "Vpn Management",
+ "name": "VPN Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "read": 1,
+   "role": "VPN Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
