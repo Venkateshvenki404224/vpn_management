@@ -271,7 +271,8 @@ Reconcile and status work runs in the `queue-long` worker — never in the reque
 
 > 📖 **New here?** The [**Developer Guide & End-to-End Walkthrough**](docs/DEVELOPMENT.md) covers
 > prerequisites, local setup, and a live trace — with real in-container output — of what happens when a
-> peer is added (atomic IP allocation → rendered conf → socket → agent).
+> peer is added (atomic IP allocation → rendered conf → socket → agent). For *who this is for and concrete
+> deployment scenarios*, see [**Usefulness & real-world use cases**](docs/USE_CASES.md).
 
 This app runs inside Docker; the backend container is **`strapay_helpdesk_backend`** and the dev site is
 `frontend`.
