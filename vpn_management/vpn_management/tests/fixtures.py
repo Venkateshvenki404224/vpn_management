@@ -49,3 +49,20 @@ def make_peer(server, **overrides):
 	values.update(overrides)
 	with patch("frappe.enqueue"):
 		return frappe.get_doc(values).insert()
+
+
+def ensure_user(email, roles):
+	"""Return a User holding (at least) ``roles`` — created if absent, else updated."""
+	if frappe.db.exists("User", email):
+		user = frappe.get_doc("User", email)
+	else:
+		user = frappe.new_doc("User")
+		user.email = email
+		user.first_name = email.split("@")[0]
+		user.send_welcome_email = 0
+	held = {row.role for row in user.roles}
+	for role in roles:
+		if role not in held:
+			user.append("roles", {"role": role})
+	user.save(ignore_permissions=True)
+	return user

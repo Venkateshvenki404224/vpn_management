@@ -124,15 +124,23 @@ after_install = "vpn_management.install.after_install"
 
 # Permissions
 # -----------
-# Permissions evaluated in scripted ways
+# Permissions evaluated in scripted ways: non-admins see only the VPN Peers they own.
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+	"VPN Peer": "vpn_management.permissions.get_permission_query_conditions",
+}
+
+has_permission = {
+	"VPN Peer": "vpn_management.permissions.has_permission",
+}
+
+# Fixtures
+# --------
+# Ship the four VPN roles (with their desk_access flags) so migrate keeps them in sync.
+
+fixtures = [
+	{"dt": "Role", "filters": [["role_name", "in", ["VPN Admin", "VPN User", "VPN API", "VPN Sync"]]]},
+]
 
 # Document Events
 # ---------------

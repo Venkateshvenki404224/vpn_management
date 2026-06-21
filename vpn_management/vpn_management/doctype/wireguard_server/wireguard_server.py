@@ -34,6 +34,30 @@ class WireGuardServer(Document):
 	def on_update(self):
 		self._enqueue_provision()
 
+	@frappe.whitelist(methods=["POST"])
+	def bring_up(self):
+		"""Converge the live interface up from the DB (idempotent reconcile)."""
+		self.check_permission("write")
+		self._enqueue_provision()
+		return {"interface": self.interface_name, "queued": True}
+
+	@frappe.whitelist(methods=["POST"])
+	def bring_down(self):
+		"""Tear the live interface down (runs the firewall PostDown)."""
+		self.check_permission("write")
+		# A DISTINCT job_id from the reconcile family (reconcile-{iface}): sharing it
+		# under deduplicate=True would let a queued reconcile silently swallow the
+		# tear-down (or vice versa) — opposite operations must not dedup each other.
+		frappe.enqueue(
+			"vpn_management.tasks.bring_down_interface",
+			queue="long",
+			enqueue_after_commit=True,
+			job_id=f"bring-down-{self.interface_name}",
+			deduplicate=True,
+			interface_name=self.interface_name,
+		)
+		return {"interface": self.interface_name, "queued": True}
+
 	def _generate_keypair(self):
 		if self.server_private_key:
 			return

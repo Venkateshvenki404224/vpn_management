@@ -7,6 +7,7 @@ from frappe.model.document import Document
 from frappe.utils import cint
 
 from vpn_management import allocation, crypto
+from vpn_management.permissions import is_admin
 
 SETTINGS = "VPN Settings"
 KEYGEN_FIELD = "allow_server_keygen"
@@ -40,6 +41,31 @@ class VPNPeer(Document):
 	def on_trash(self):
 		self._release_allocation()
 		self._enqueue_reconcile()
+
+	@frappe.whitelist(methods=["POST"])
+	def regenerate_keys(self):
+		"""Rotate this peer's keypair server-side; never return the private key."""
+		self.check_permission("write")
+		# Server-side keygen writes the permlevel-1 private_key. A caller without
+		# permlevel-1 write would have that new key silently reset on save (leaving
+		# the public_key rotated but the keypair mismatched), so restrict to admins —
+		# non-admins rotate client-side and update public_key. Mirrors create_peer.
+		if not is_admin(frappe.session.user):
+			frappe.throw(
+				_("Only VPN Admin may regenerate keys; rotate client-side and update the public key."),
+				frappe.PermissionError,
+			)
+		self.private_key, self.public_key = crypto.generate_keypair()
+		self.save()
+		return {"name": self.name, "public_key": self.public_key, "assigned_ip": self.assigned_ip}
+
+	@frappe.whitelist(methods=["POST"])
+	def disable(self):
+		"""Disable the peer (frees its address, drops it from the interface)."""
+		self.check_permission("write")
+		self.enabled = 0
+		self.save()
+		return {"name": self.name, "status": self.status}
 
 	def _maybe_generate_keys(self):
 		if self.public_key or not _allow_server_keygen():

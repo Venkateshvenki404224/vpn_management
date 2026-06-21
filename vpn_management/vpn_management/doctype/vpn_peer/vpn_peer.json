@@ -196,6 +196,31 @@
    "read": 1,
    "role": "System Manager",
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "read": 1,
+   "role": "VPN Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "VPN Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "VPN API",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "VPN User"
   }
  ],
  "sort_field": "modified",

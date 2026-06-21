@@ -11,7 +11,7 @@ The site name is `frontend`. Login is `administrator` / `W8qKn9m33Zix9r5O`.
 
 This app runs inside Docker containers. If you want to test something, run bench commands for the site using Docker commands. 
 
-Backend Container name : vpn_management_backend
+Backend Container name : strapay_helpdesk_backend
 
 
 ```bash

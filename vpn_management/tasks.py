@@ -64,6 +64,22 @@ def reconcile_interface(interface_name):
 	audit.record(action, interface_name, "success", argv=argv, in_use_count=in_use)
 
 
+def bring_down_interface(interface_name):
+	"""Tear the live interface down (runs the firewall PostDown via wg-quick down)."""
+	server = frappe.get_doc("WireGuard Server", interface_name)
+	in_use = _in_use_count(interface_name)
+	try:
+		_agent("down", [interface_name])
+	except Exception as error:
+		_mark(server, status="Error")
+		audit.record("interface_down", interface_name, "failure", detail=str(error), in_use_count=in_use)
+		frappe.log_error(title="WireGuard bring-down failed", message=f"down {interface_name}: {error}")
+		return
+	_mark(server, status="Down", interface_up=0)
+	argv = f"wg-quick down {interface_name}"
+	audit.record("interface_down", interface_name, "success", argv=argv, in_use_count=in_use)
+
+
 def poll_status():
 	"""Read live handshake/rx/tx back onto peers for every up interface."""
 	for name in _server_names(interface_up=1):

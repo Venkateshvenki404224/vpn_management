@@ -15,7 +15,11 @@
   "redirect_target_port",
   "dns_servers",
   "default_keepalive",
-  "status_poll_interval_min"
+  "status_poll_interval_min",
+  "sync_section",
+  "sync_enabled",
+  "sync_requires_local",
+  "sync_token"
  ],
  "fields": [
   {
@@ -95,6 +99,32 @@
    "fieldname": "status_poll_interval_min",
    "fieldtype": "Int",
    "label": "Status Poll Interval (min)"
+  },
+  {
+   "fieldname": "sync_section",
+   "fieldtype": "Section Break",
+   "label": "Sync & Security"
+  },
+  {
+   "default": "0",
+   "description": "Master kill-switch. While off, sync_network no-ops with an audited skipped result.",
+   "fieldname": "sync_enabled",
+   "fieldtype": "Check",
+   "label": "Sync Enabled"
+  },
+  {
+   "default": "1",
+   "description": "Require sync_network to originate from loopback (frappe.local.request_ip).",
+   "fieldname": "sync_requires_local",
+   "fieldtype": "Check",
+   "label": "Sync Requires Local"
+  },
+  {
+   "description": "Informational only. The real token lives in site_config (bench set-config vpn_sync_token); this field never stores the secret.",
+   "fieldname": "sync_token",
+   "fieldtype": "Data",
+   "label": "Sync Token (display mirror)",
+   "read_only": 1
   }
  ],
  "issingle": 1,
@@ -111,6 +141,15 @@
    "print": 1,
    "read": 1,
    "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "read": 1,
+   "role": "VPN Admin",
    "share": 1,
    "write": 1
   }
