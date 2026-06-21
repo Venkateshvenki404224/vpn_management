@@ -212,8 +212,31 @@ curl -X POST https://vpn.example.com/api/method/vpn_management.api.create_peer \
 
 ## Installation
 
-The app ships its own one-command installer that also brings up the privileged sidecar. Run it from the
-**bench root**:
+### Easy install — a bare server → a live VPN, one command
+
+On a **fresh Linux box** (just Docker-capable; the script installs Docker if missing), clone the app and run
+the easy-install. It stands up an isolated Frappe v16 stack, builds + bakes the app and its SPA, wires the
+privileged `wg-agent` sidecar, sets the client endpoint, enables the scheduler, and brings `wg0` up live —
+the entire [SETTING_UP.md](SETTING_UP.md) walkthrough, automated:
+
+```bash
+git clone <this-repo-url> vpn_management && cd vpn_management
+./deploy/easy-install.sh --endpoint <public-ip-or-dns>
+```
+
+Modelled on [Frappe's own easy-install](https://github.com/frappe/bench/blob/develop/easy-install.py), it
+isolates everything under its own compose project + a free web port, so it sits safely beside other stacks
+on a shared host. Useful flags: `--project`, `--dir`, `--port`, `--site`, `--frappe-branch`,
+`--app-source <git-url>`, `--skip-docker` (see `--help`). When the run finishes it prints the console URL
+and the generated `Administrator` password.
+
+> Open inbound **UDP 44556** on any edge firewall, and put the console behind TLS before exposing the admin
+> login. See [SETTING_UP.md](SETTING_UP.md) for the full annotated walkthrough and the gotchas it automates.
+
+### Existing bench
+
+If you already have a Frappe v16 bench, the app ships a one-command installer that brings up the privileged
+sidecar. Run it from the **bench root**:
 
 ```bash
 # Auto-detects compose vs. standalone; pass 'compose' or 'standalone' to force.

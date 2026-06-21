@@ -178,8 +178,12 @@ fixtures = [
 
 scheduler_events = {
 	"cron": {
-		# Read live handshake/rx/tx back onto peers every 5 minutes.
-		"*/5 * * * *": ["vpn_management.tasks.poll_status"],
+		# Read live handshake/rx/tx back onto peers every 2 minutes. This MUST stay
+		# shorter than the 5-min presence/stale window (status_poll_interval_min):
+		# WireGuard rekeys ~every 120s, so polling every 2 min keeps the recorded
+		# handshake < ~240s old (well under 300s) and an active peer never shows
+		# Offline between polls.
+		"*/2 * * * *": ["vpn_management.tasks.poll_status"],
 		# Drift-correct the fleet and re-converge from the DB every 10 minutes.
 		"*/10 * * * *": ["vpn_management.tasks.reconcile_all"],
 	},

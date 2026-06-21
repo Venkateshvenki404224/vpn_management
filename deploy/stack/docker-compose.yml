@@ -1,0 +1,296 @@
+# Self-contained Frappe v16 stack used by deploy/easy-install.sh.
+#
+# A custom image (Frappe baked into the venv) with ./apps bind-mounted over it,
+# plus bundled MariaDB + Redis. Service names `backend` / `queue-long` line up
+# with the wg-agent compose fragment (deploy/docker-compose.wg-agent.yml), so the
+# sidecar layers on via `-f` without editing this file. All knobs come from .env.
+services:
+  backend:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_backend
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  configurator:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_configurator
+    command:
+      - |
+        ls -1 apps > sites/apps.txt;
+        echo "Creating common_site_config.json...";
+        echo '{
+          "db_host": "'"$$DB_HOST"'",
+          "db_port": '"$$DB_PORT"',
+          "redis_cache": "redis://'"$$REDIS_CACHE"'",
+          "redis_queue": "redis://'"$$REDIS_QUEUE"'",
+          "redis_socketio": "redis://'"$$REDIS_QUEUE"'",
+          "socketio_port": '"$$SOCKETIO_PORT"'
+        }' > sites/common_site_config.json;
+        echo "common_site_config.json created successfully";
+    deploy:
+      restart_policy:
+        condition: on-failure
+    entrypoint:
+      - bash
+      - -c
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: "9000"
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+
+  create-site:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_create-site
+    deploy:
+      restart_policy:
+        condition: none
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        wait-for-it -t 120 db:3306;
+        wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        export start=`date +%s`;
+        until [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".db_host // empty"` ]] && \
+          [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_cache // empty"` ]] && \
+          [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_queue // empty"` ]];
+        do
+          echo "Waiting for sites/common_site_config.json to be created";
+          sleep 5;
+          if (( `date +%s`-start > 120 )); then
+            echo "could not find sites/common_site_config.json with required keys";
+            exit 1
+          fi
+        done;
+        echo "sites/common_site_config.json found";
+        echo "Creating site: $${SITE_NAME:-frontend}";
+        if [ -d "sites/$${SITE_NAME:-frontend}" ]; then
+          echo "Site $${SITE_NAME:-frontend} already exists, skipping creation";
+        elif [ -n "$${INSTALL_APPS}" ]; then
+          echo "Installing apps: $${INSTALL_APPS}";
+          IFS=',' read -ra APPS_ARRAY <<< "$${INSTALL_APPS}";
+          INSTALL_CMD="bench new-site $${SITE_NAME:-frontend} --mariadb-user-host-login-scope='%' --admin-password=$${ADMIN_PASSWORD} --db-root-username=root --db-root-password=$${DB_ROOT_PASSWORD}";
+          for app in "$${APPS_ARRAY[@]}"; do
+            INSTALL_CMD="$$INSTALL_CMD --install-app $$app";
+          done
+          INSTALL_CMD="$$INSTALL_CMD --set-default";
+          eval $$INSTALL_CMD;
+        else
+          echo "Creating site without installing apps...";
+          bench new-site $${SITE_NAME:-frontend} --mariadb-user-host-login-scope='%' --admin-password=$${ADMIN_PASSWORD} --db-root-username=root --db-root-password=$${DB_ROOT_PASSWORD} --set-default;
+        fi
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: "9000"
+      SITE_NAME: ${SITE_NAME:-frontend}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      INSTALL_APPS: ${INSTALL_APPS:-}
+
+  db:
+    image: mariadb:10.6
+    container_name: ${PROJECT_NAME:-vpn_management}_db
+    healthcheck:
+      test: mysqladmin ping -h localhost --password=${MARIADB_ROOT_PASSWORD}
+      interval: 1s
+      retries: 15
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - frappe_network
+
+  frontend:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_frontend
+    command:
+      - nginx-entrypoint.sh
+    deploy:
+      restart_policy:
+        condition: on-failure
+    environment:
+      BACKEND: backend:8000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-frontend}
+      SOCKETIO: websocket:9000
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: 50m
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    ports:
+      - ${PORT:-8080}:8080
+    depends_on:
+      backend:
+        condition: service_started
+      websocket:
+        condition: service_started
+
+  queue-long:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_queue-long
+    command:
+      - bench
+      - worker
+      - --queue
+      - long,default,short
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  queue-short:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_queue-short
+    command:
+      - bench
+      - worker
+      - --queue
+      - short,default
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  redis-cache:
+    image: redis:6.2-alpine
+    container_name: ${PROJECT_NAME:-vpn_management}_redis-cache
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - redis-cache-data:/data
+    networks:
+      - frappe_network
+
+  redis-queue:
+    image: redis:6.2-alpine
+    container_name: ${PROJECT_NAME:-vpn_management}_redis-queue
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - redis-queue-data:/data
+    networks:
+      - frappe_network
+
+  scheduler:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_scheduler
+    command:
+      - bench
+      - schedule
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  websocket:
+    image: ${IMAGE_NAME:-vpn_management:latest}
+    container_name: ${PROJECT_NAME:-vpn_management}_websocket
+    command:
+      - node
+      - /home/frappe/frappe-bench/apps/frappe/socketio.js
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps:/home/frappe/frappe-bench/apps
+      - logs:/home/frappe/frappe-bench/logs
+    networks:
+      - frappe_network
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:
+  redis-cache-data:
+  redis-queue-data:
+  sites:
+  assets:
+  logs:
+
+networks:
+  frappe_network:
+    driver: bridge
