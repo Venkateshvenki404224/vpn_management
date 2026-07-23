@@ -138,9 +138,9 @@ class TestSelfServiceConfig(IntegrationTestCase):
 		self.assertIn("[Peer]", conf)
 		self.assertIn(f"PublicKey = {self.server.server_public_key}", conf)
 		self.assertIn("Endpoint = vpn.example.com:", conf)
-		# The [Peer] AllowedIPs must be the CLIENT route (default 0.0.0.0/0, ::/0), never the
+		# The [Peer] AllowedIPs must be the CLIENT route (default 172.27.0.0/16), never the
 		# server-side allowed_ips (the peer's own /32) — swapping them is the spec's named bug.
-		self.assertIn("AllowedIPs = 0.0.0.0/0, ::/0", conf)
+		self.assertIn("AllowedIPs = 172.27.0.0/16", conf)
 		self.assertNotIn(f"AllowedIPs = {peer['assigned_ip']}/32", conf)
 		self.assertEqual(frappe.response["type"], "download")
 		self.assertTrue(frappe.response["filename"].endswith(".conf"))
