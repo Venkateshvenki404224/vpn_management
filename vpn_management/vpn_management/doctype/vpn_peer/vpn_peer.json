@@ -109,7 +109,7 @@
    "label": "Allowed IPs"
   },
   {
-   "default": "0.0.0.0/0, ::/0",
+   "default": "172.27.0.0/16",
    "description": "What the client routes through the tunnel (used when rendering the client config).",
    "fieldname": "client_allowed_ips",
    "fieldtype": "Data",
