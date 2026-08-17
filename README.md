@@ -8,7 +8,7 @@ Manage a fleet of WireGuard peers from a purpose-built **Frappe UI command cente
 self-service portal for their own config + QR, and drive everything from a token-authenticated REST API —
 while the kernel-touching half stays locked behind a single, minimal, validated socket.
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](license.txt)
 ![Frappe](https://img.shields.io/badge/Frappe-v16-0089FF.svg)
 ![Python](https://img.shields.io/badge/Python-3.14%2B-3776AB.svg)
 ![WireGuard](https://img.shields.io/badge/WireGuard-control%20plane-88171A.svg)
@@ -354,6 +354,10 @@ cd apps/vpn_management
 pre-commit install
 ```
 
+Contributions are accepted under the AGPL-3.0-only licence, and require the same
+one-time [Contributor License Agreement](https://github.com/Venkateshvenki404224/benchpress/blob/develop/.github/CLA.md)
+as BenchPress.
+
 ---
 
 ## Project layout
@@ -382,4 +386,22 @@ deploy/
 
 ## License
 
-[MIT](license.txt)
+```
+Copyright (C) 2026 Venkatesh
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+```
+
+The full text is in [license.txt](license.txt). The SPDX identifier is
+`AGPL-3.0-only`, matching
+[BenchPress](https://github.com/Venkateshvenki404224/benchpress), which declares this
+app as a required dependency.
