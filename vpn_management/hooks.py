@@ -3,7 +3,7 @@ app_title = "Vpn Management"
 app_publisher = "Venkatesh"
 app_description = "The VPN Management App"
 app_email = "venkateshvenki404224@gmail.com"
-app_license = "mit"
+app_license = "AGPL-3.0-only"
 
 # Apps
 # ------------------
