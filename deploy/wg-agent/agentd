@@ -12,6 +12,7 @@ Verbs: ``up <iface>``, ``syncconf <iface> <conf>``, ``show [<iface> [dump]]``.
 """
 
 import json
+import logging
 import os
 import re
 import socket
@@ -27,6 +28,7 @@ SOCKET_PATH = os.path.join(SOCKET_DIR, "agent.sock")
 # uid allowed to use the socket. The container's frappe user is 1000; a
 # standalone install passes the real bench uid via WG_AGENT_SOCKET_UID.
 SOCKET_UID = int(os.environ.get("WG_AGENT_SOCKET_UID", "1000"))
+LOGGER = logging.getLogger("wg-agent")
 
 ALLOWED_VERBS = ("up", "syncconf", "show")
 INTERFACE_PATTERN = re.compile(r"^wg[0-9]+$")
@@ -363,8 +365,20 @@ def _bind_socket():
 	server.bind(SOCKET_PATH)
 	os.chown(SOCKET_PATH, SOCKET_UID, SOCKET_UID)
 	os.chmod(SOCKET_PATH, 0o600)
+	_log_socket_ownership()
 	server.listen(16)
 	return server
+
+
+def _log_socket_ownership():
+	info = os.stat(SOCKET_PATH)
+	LOGGER.info(
+		"socket bound path=%s uid=%s gid=%s mode=%s",
+		SOCKET_PATH,
+		info.st_uid,
+		info.st_gid,
+		oct(stat.S_IMODE(info.st_mode)),
+	)
 
 
 def serve():
@@ -382,4 +396,5 @@ def serve():
 
 
 if __name__ == "__main__":
+	logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 	serve()

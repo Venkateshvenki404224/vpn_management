@@ -2,8 +2,8 @@
 """Unit tests for the wg-agent security boundary.
 
 ``agentd`` is a standalone script (no ``.py`` extension) that runs in the
-sidecar, so it is loaded here by path. These tests cover *only* validation —
-they never shell out — and run with plain stdlib::
+sidecar, so it is loaded here by path. These tests cover validation and
+startup logging — they never shell out — and run with plain stdlib::
 
     python3 deploy/wg-agent/test_agentd.py
 """
@@ -27,6 +27,33 @@ def _load_agentd():
 
 
 agentd = _load_agentd()
+
+
+class SocketOwnershipLogTests(unittest.TestCase):
+	def setUp(self):
+		self._original_path = agentd.SOCKET_PATH
+
+	def tearDown(self):
+		agentd.SOCKET_PATH = self._original_path
+
+	def test_logs_actual_socket_state(self):
+		with tempfile.NamedTemporaryFile(delete=False) as handle:
+			path = handle.name
+		try:
+			os.chmod(path, 0o600)
+			agentd.SOCKET_PATH = path
+			info = os.stat(path)
+
+			with self.assertLogs(agentd.LOGGER, level="INFO") as logs:
+				agentd._log_socket_ownership()
+
+			line = "\n".join(logs.output)
+			self.assertIn(f"path={path}", line)
+			self.assertIn(f"uid={info.st_uid}", line)
+			self.assertIn(f"gid={info.st_gid}", line)
+			self.assertIn("mode=0o600", line)
+		finally:
+			os.unlink(path)
 
 
 class InterfaceValidationTests(unittest.TestCase):
